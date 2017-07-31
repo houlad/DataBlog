@@ -84,7 +84,7 @@ oversimplified model) that we are seeing an increase of about 27 violent crime r
 every year.  However, as you can already see from the graph, the year-to-year variation
 is substantial making a simple trend line like this highly suspect.
 
-```{r violent_crime_trend_plot, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+```{r violent_crime_trend_plot, echo = FALSE, cache = TRUE,  warning = FALSE, message = FALSE}
 bar.theme <- 
   theme(legend.position = "none")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
@@ -107,9 +107,8 @@ p1 <- crime_lou%>%
 p1
 ```
 
-If numbers are more your thing, you can see that violent crime is up about 5.7% from the 
-12 year mean, but it is down slightly from the peak level which occured in 2007.
-```{r violent_per_changes, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+
+```{r violent_per_changes, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 all_vio_sum <- crime_lou%>%
   filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
   group_by(year)%>%
@@ -117,13 +116,15 @@ all_vio_sum <- crime_lou%>%
 
 
 all_vio_changes <- all_vio_sum%>%
-  mutate(crime_type = 'violent_crime',
-         Change_from_2015 = paste0(round(100*((count /lag(count))-1), 1), "%"),
+  mutate(Change_from_2015 = paste0(round(100*((count /lag(count))-1), 1), "%"),
          Change_from_Max = paste0(round(100*((count /max(count))-1), 1), "%"),
          Change_from_Mean = paste0(round(100*((count /mean(count))-1), 1), "%"))%>%
   filter(year == 2016)%>%
-  select(crime_type, Change_from_2015, Change_from_Max, Change_from_Mean)
-
+  select(Change_from_2015, Change_from_Max, Change_from_Mean)
+```
+If numbers are more your thing, you can see that violent crime is up about `r all_vio_changes$Change_from_Mean` from the 
+12 year mean, and is actually at an all-time high in 2016.
+```{r violent_per_changes2, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 all_vio_changes
 ```
 
@@ -143,7 +144,7 @@ plot shows a little better is the slight right-skewed shape to the distribution.
 approximately normal(the dotted red line), but with that right-skew which indicates 
 higher counts have more probability associated with them.
 
-```{r, daily_count_hist/dist, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+```{r, daily_count_hist/dist, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 hist.theme <- 
   theme(legend.position = "none")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
@@ -196,7 +197,7 @@ Looking at the same data, but broken into years, we can see that, while there is
 it is not obvious whether there has been a shift in the distribution--which would indicate a change in 
 violent crime. 
 
-```{r, daily_count_all_years, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+```{r, daily_count_all_years, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 ggplot(daily_sums_by_year, aes(x = count, color = year))+
   geom_density()+
   facet_wrap(~year)+
@@ -206,7 +207,7 @@ ggplot(daily_sums_by_year, aes(x = count, color = year))+
 ```
 However, when we compare 2016 versus 2005-2015, a clear shift in the distribution
 is visible.  
-```{r, daily_count_all_vs_2015, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+```{r, daily_count_all_vs_2015, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 ggplot(daily_sums_by_year%>%filter(year != 2016), aes(x = count, fill = 'darkblue'))+
   geom_density(alpha = .4)+
   geom_density(data = daily_sums_by_year%>%filter(year == 2016), aes(x = count, fill = 'darkred'), 
@@ -221,7 +222,7 @@ has increased? We can if we ask the question 'Is the mean count of violent crime
 per day in 2016 different from the mean count of violent crimes in the period 2005-2015'?
 Using a t-test we get the following.
 
-```{r,t_test_all_violent, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+```{r,t_test_all_violent, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 sums_2005_2015 <- daily_sums_by_year%>%
   filter(year != 2016)
 sums_2005 <- daily_sums_by_year%>%
@@ -268,7 +269,7 @@ right in the middle of those neighborhoods. After some additional data [preparat
 and [geocoding](https://github.com/Grollus/LouisvilleCrime/blob/master/LouisvilleCrime/Louisville_Crime_Geocoding.R)
 it is simple enough to see where violent crime is taking place.
 
-```{r crime_map1, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+```{r crime_map1, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 louisvilleMap <- get_map(location = c(lon = -85.686028, lat = 38.181602), source = "google",
                        maptype = 'roadmap', color = 'bw', zoom = 11)
 
@@ -290,7 +291,7 @@ ggmap(louisvilleMap)+
 It should be immediately obvious that there is one major and one minor hotspot.  Let's 
 zoom in to those areas and see if we can detect a change over time.
 
-```{r crime_map2, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+```{r crime_map2, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 # hot_spots <- violent_crime%>%
 #   filter(zip_code == 40212|zip_code == 40202|zip_code == 40203|zip_code == 40211|
 #            zip_code == 40210|zip_code == 40208|zip_code == 40215|zip_code == 40217|
@@ -311,7 +312,7 @@ ggmap(hot_spots_map)+
   theme(axis.title = element_blank())+
   theme(axis.text = element_blank(), axis.ticks = element_blank())
 ```
-```{r zip_code_breakdown, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+```{r zip_code_breakdown, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 zip.theme <- 
   theme(legend.position = "none")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
@@ -342,7 +343,7 @@ account for `r round(sum(crime_by_zip$count[1:6])/sum(crime_by_zip$count)*100, 2
 all violent crime in Louisville. If we bump that up to the 12 zip codes, we cover
 `r round(sum(crime_by_zip$count[1:12])/sum(crime_by_zip$count)*100, 2)`% of violent crimes.
 
-```{r zip_code_plot, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+```{r zip_code_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 ggplot(crime_by_zip, aes(y = percent_of_total, x = zip_code))+
   geom_bar(stat = 'identity', fill = 'darkblue', alpha = .5)+
   coord_flip()+
@@ -357,7 +358,7 @@ Finally, let's take a quick look at the worst ten zip codes in terms of violent 
 if maybe a change within those areas is why we are seeing marginally higher violent
 crime numbers in the city as a whole.
 
-```{r worst_zip_codes, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+```{r worst_zip_codes, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 bar.theme <- 
   theme(legend.position = "none")+
   theme(plot.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
@@ -394,7 +395,7 @@ or is the problem more widespread?
 The plot below shows that by excluding the top 6 violent crime zip codes--which, remember, account for nearly 
 50% of all Louisville's violent crime--we actually see a dramatically different picture.
 
-```{r 40211_exclusion, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+```{r 40211_exclusion, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 bar.theme <- 
   theme(legend.position = "none")+
   theme(plot.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
@@ -479,7 +480,7 @@ within the city are bearing the brunt of this increase, while large portions of 
 are left with little to no increase at all.
 
 
-```{r t_test_no_40211, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+```{r t_test_no_40211, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 t
 ```
 
@@ -516,4 +517,4 @@ than a ground truth.
 
 Stay tuned for part two where I begin pilfering the dataset for insight into Louisville's theft problem.
 
-The full code used to generate this report can be found [here](https://github.com/Grollus/LouisvilleCrime/blob/master/Exploring_Violent_Crime_in_Louisville.Rmd).
+The full code used to generate this report can be found [here](https://raw.githubusercontent.com/Grollus/DataBlog/master/content/post/2017-07-31-exploring-violent-crime-in-louisville.Rmd).
