@@ -44,7 +44,7 @@ library(gridExtra)
 ```{r, load_data_and_base_filter, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
 # since most data cleaning was done outside this report, all I have to do here is
 # create any useful additional variables and load the file
-raw_data <- read_rds("lou_crime_geocoded_df.rds.gzip")
+raw_data <- read_rds("/data/lou_crime_geocoded_df.rds.gzip")
 
 create_date_variables <- function(df){
   require(lubridate)
