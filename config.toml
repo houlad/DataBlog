@@ -1,7 +1,7 @@
 baseurl = "/"
 relativeurls = true
 languageCode = "en-us"
-title = ""
+title = "A blog analyzing stuff, using data"
 theme = "hugo-lithium-theme"
 googleAnalytics = ""
 disqusShortname = ""
