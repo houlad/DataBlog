@@ -1,0 +1,519 @@
+---
+title: Exploring Violent Crime in Louisville
+author: Adam
+date: '2017-07-31'
+slug: exploring-violent-crime-in-louisville
+categories:
+  - Crime
+  - City Development
+tags:
+  - R
+  - Visualization
+  - Mapping
+  - Statistics
+---
+
+# Introduction
+  Over the past year Louisville's local news seems like it has been increasingly dominated
+by crime news. Whether it was riots, teens running rampant or a record number of homicides,
+you got the impression that our little city was inching toward a future resembling a scene
+from Mad Max. Is it no longer safe to walk the streets? Do we need to barracade the doors
+and booby trap the lawn?  Or is this crime increase overblown and not, in fact, the start
+of the apocalypse. This is the first in, hopefully, a series of posts that will 
+dive into the data and investigate just how bad crime has gotten in our fair city.
+
+  Luckily, Louisville has a rich crime dataset that is open and ripe for analysis.
+Although records extend back to the 1920's, the data is very sparse up until around
+2004.  For the purposes of this investigation, I will look at crime records spanning 
+2005-2016.  Given the breadth of the available data, I will need to split the analysis
+into components in order to go into any detail.  This first post will deal strictly 
+with violent crime.  
+
+```{r package_load, cache = TRUE, echo = FALSE, message=FALSE, warning = FALSE}
+#Loading all packages necessary for report
+library(stringi)
+library(dplyr)
+library(ggplot2)
+library(ggmap)
+library(readr)
+library(printr)
+library(viridis)
+library(gridExtra)
+```
+
+```{r, load_data_and_base_filter, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# since most data cleaning was done outside this report, all I have to do here is
+# create any useful additional variables and load the file
+raw_data <- read_rds("lou_crime_geocoded_df.rds.gzip")
+
+create_date_variables <- function(df){
+  require(lubridate)
+  # Uses the POSIXct date_occured variable to create useful date related
+  # subvariables
+  df$year <- year(df$date_occured)
+  df$month <- month(df$date_occured)
+  df$day <- day(df$date_occured)
+  df$hour <- hour(df$date_occured)
+  df$year_month <- paste(df$year, df$month, sep = '-')
+  df$day_of_week <- wday(df$date_occured, label = TRUE, abbr = FALSE)
+  df$weekday <- ifelse(df$day_of_week == "Saturday" | df$day_of_week == "Sunday", 
+                              "Weekend", "Weekday")
+  df$yday <- yday(df$date_occured)
+  
+  return(df)
+}
+# Date variable creation was done within louisville_raw_data_and_geocoding, so
+# create_date_variables is basically superfluous.
+# crime_lou <- create_date_variables(raw_data)
+
+# Filter out records with no lat/lng coords and those from desired time period
+crime_lou <- raw_data%>%
+  filter(year <=2016 & year >=2005)
+```
+
+# Overview of Violent Crime
+
+
+2016 was a year with a record number of homicides in Louisville. Seeing these reports every day 
+was the genesis of this analysis, so it is only fitting to begin by exploring the most
+visceral of criminal offenses--violent crime. There are four offenses the FBI considers violent
+crime -- murder and nonnegligent manslaughter, forcible rape, robbery and aggravated assault. 
+As can be seen in the figure below, in the aggregate, a minor increase is apparent.
+The red trend line fit to the data has a slope of about 27 meaning (with this enormously
+oversimplified model) that we are seeing an increase of about 27 violent crime reports
+every year.  However, as you can already see from the graph, the year-to-year variation
+is substantial making a simple trend line like this highly suspect.
+
+```{r violent_crime_trend_plot, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+bar.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+p1 <- crime_lou%>%
+  filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+  geom_bar(stat = 'identity', colour = "black",fill = "darkblue",  alpha = .5)+
+  ggtitle("Violent Crime, By Year")+
+  labs(x = "Year", y = "Incident Count")+
+  scale_x_discrete(limits = seq(2005, 2016, by = 1))+
+  bar.theme
+p1
+```
+
+If numbers are more your thing, you can see that violent crime is up about 5.7% from the 
+12 year mean, but it is down slightly from the peak level which occured in 2007.
+```{r violent_per_changes, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+all_vio_sum <- crime_lou%>%
+  filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
+  group_by(year)%>%
+  summarise(count = n())
+
+
+all_vio_changes <- all_vio_sum%>%
+  mutate(crime_type = 'violent_crime',
+         Change_from_2015 = paste0(round(100*((count /lag(count))-1), 1), "%"),
+         Change_from_Max = paste0(round(100*((count /max(count))-1), 1), "%"),
+         Change_from_Mean = paste0(round(100*((count /mean(count))-1), 1), "%"))%>%
+  filter(year == 2016)%>%
+  select(crime_type, Change_from_2015, Change_from_Max, Change_from_Mean)
+
+all_vio_changes
+```
+
+## Is the Increase in Violent Crime Significant
+
+So it does seem like we are seeing an upward trend in violent crime.  But looking at the graph,
+it sure doesn't appear to be the end of the world scenario the news is predicting.  Was 2016
+even a significant increase from the general trend of the past decade?  This is a more complicated
+question than it appears.  Are we asking about 2016 compared to the running average 
+from the previous 11 years(2005-2015)? Or are we asking whether 2016 counts are different from
+2015(or different from 2005 for that matter)? Let's look at both and see what they tell us.
+
+First, let's look at the breakdown of violent crime by day.  Both the histogram and the density
+plot show the same information, just in different ways. What we can see on both is that 
+right around 10 violent crimes per day is most common.  What the density
+plot shows a little better is the slight right-skewed shape to the distribution. It is
+approximately normal(the dotted red line), but with that right-skew which indicates 
+higher counts have more probability associated with them.
+
+```{r, daily_count_hist/dist, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+hist.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+density.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+# daily_sums <- crime_lou%>%
+#   filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
+#   group_by(yday)%>%
+#   summarise(count = n())
+
+# First and last day of year are way outside the rest of the distribution
+# I think it has something to do with wanting year end numbers to look better,
+# but regardless, I am excluding them for now
+daily_sums_by_year <- crime_lou%>%
+  filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
+  group_by(year = as.factor(year), yday = as.factor(yday))%>%
+  summarise(count = n())%>%
+  filter(!(yday == 1|yday == 366))
+
+p2 <- ggplot(daily_sums_by_year, aes(x = count))+
+  geom_histogram(bins = 26, fill = 'darkblue', alpha = .5)+
+  labs(x = "Daily Violent Crime Count", y = "Frequency")+
+  hist.theme
+
+p3 <- ggplot(daily_sums_by_year, aes(x = count))+
+  geom_density(fill = 'darkblue', alpha = .5)+
+  stat_function(fun = dnorm,
+                color = "red", linetype = 2, size = 1,
+                args = list(mean = mean(daily_sums_by_year$count), sd = sd(daily_sums_by_year$count)))+
+  labs(x = "Daily Violent Crime Count", y = "Density")+
+  density.theme
+
+grid.arrange(p2, p3, ncol = 2)
+```
+
+
+### Violent Crime Distributions Broken Down By Year
+Looking at the same data, but broken into years, we can see that, while there is variation,
+it is not obvious whether there has been a shift in the distribution--which would indicate a change in 
+violent crime. 
+
+```{r, daily_count_all_years, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+ggplot(daily_sums_by_year, aes(x = count, color = year))+
+  geom_density()+
+  facet_wrap(~year)+
+  ggtitle("Distribution of Violent Crime Count Per Day")+
+  labs(x = "Daily Violent Crime Count", y = "Density")+
+  density.theme
+```
+However, when we compare 2016 versus 2005-2015, a clear shift in the distribution
+is visible.  
+```{r, daily_count_all_vs_2015, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+ggplot(daily_sums_by_year%>%filter(year != 2016), aes(x = count, fill = 'darkblue'))+
+  geom_density(alpha = .4)+
+  geom_density(data = daily_sums_by_year%>%filter(year == 2016), aes(x = count, fill = 'darkred'), 
+               alpha = .4)+
+  scale_fill_identity(name = "Years", guide = 'legend', labels = c("2005-2015", "2016"))+
+  labs(x = "Daily Violent Crime Count", y = "Density")+
+  density.theme
+```
+
+With all this in hand, can we give a more definitive answer as to whether violent crime
+has increased? We can if we ask the question 'Is the mean count of violent crimes
+per day in 2016 different from the mean count of violent crimes in the period 2005-2015'?
+Using a t-test we get the following.
+
+```{r,t_test_all_violent, echo = FALSE, cache = TRUE, out.width = '1100px', warning = FALSE, message = FALSE}
+sums_2005_2015 <- daily_sums_by_year%>%
+  filter(year != 2016)
+sums_2005 <- daily_sums_by_year%>%
+  filter(year == 2005)
+sums_2015 <- daily_sums_by_year%>%
+  filter(year == 2015)
+sums_2016 <- daily_sums_by_year%>%
+  filter(year == 2016)
+
+t.test(sums_2016$count, mu = mean(sums_2005_2015$count))
+# t.test(sums_2005$count, sums_2015$count)
+# t.test(sums_2005$count, sums_2015$count, paired = TRUE)
+# t.test(sums_2014$count, sums_2015$count)
+```
+
+That is a lot of information, but we want to focus on two values--the p-value and the 
+confidence interval. The test is asking if the 'true' mean number of violent crimes per day is
+10.3, how likely is it that we see a random sample(the data from 2016) with a mean of 11.78.
+The p-value of 4.83e-11 is basically the probability of seeing this result. So in this case, 
+the result is almost unheard of if it were just due to chance(i.e., there is a real difference).
+Looking at the confidence interval, if our 2005-2015 mean of 10.3 was contained within
+it would indicate that we could not be confident 2016's results weren't due to random 
+fluctuation.  Both of these values indicate that the mean of 2016 is different from, and in
+this case larger than, the 2005-2015 mean.
+
+With all of that said, it is important to keep in mind the difference between statistical 
+and practical significance.  While there does appear to be a statisically significant
+change in the daily violent crime count, that does not necessarily mean there is a practically
+significant difference.  Looking at absolute numbers, we are looking at a difference of
+`r round(mean(sums_2016$count) -mean(sums_2005_2015$count), 2)`.  Is 1.48 more violent
+crimes per day cause for alarm?  Well, that depends on a lot of factors, most of which
+I won't get into here.  But for illustration purposes I will point out that according to the
+latest census [information](https://www.census.gov/quickfacts/table/PST045214/21111),
+Louisville's population grew 3.3% from 2010 to 2016.  It seems logical that
+an increase in population will also result in an increase in absolute crime numbers. If you normalize for population
+increase, do you still see a significant change?  I will leave that analysis to the reader.
+
+# Mapping Violent Crime Locations
+
+It is also informative to see where the violent crimes are centered in Louisville.
+Although this greatly simplifies the issue, if crimes are highly concentrated in certain areas
+you may have less to worry about if you live across town than if you happen to live
+right in the middle of those neighborhoods. After some additional data [preparation](https://github.com/Grollus/LouisvilleCrime/blob/master/louisville_raw_data_and_geocoding.R)
+and [geocoding](https://github.com/Grollus/LouisvilleCrime/blob/master/LouisvilleCrime/Louisville_Crime_Geocoding.R)
+it is simple enough to see where violent crime is taking place.
+
+```{r crime_map1, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+louisvilleMap <- get_map(location = c(lon = -85.686028, lat = 38.181602), source = "google",
+                       maptype = 'roadmap', color = 'bw', zoom = 11)
+
+violent_crime <- crime_lou%>%
+  filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')
+
+ggmap(louisvilleMap)+
+  stat_bin2d(
+    aes(x = lng, y = lat),
+    data = violent_crime,
+    size = .00001, bins = 40, alpha = .75, color = "gray20"
+  )+
+  scale_fill_viridis(option = "inferno", name = "Incident Count")+
+  ggtitle("Louisville Violent Crime, 2005-2016")+
+  density.theme+
+  theme(axis.title = element_blank())+
+  theme(axis.text = element_blank(), axis.ticks = element_blank())
+```
+It should be immediately obvious that there is one major and one minor hotspot.  Let's 
+zoom in to those areas and see if we can detect a change over time.
+
+```{r crime_map2, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+# hot_spots <- violent_crime%>%
+#   filter(zip_code == 40212|zip_code == 40202|zip_code == 40203|zip_code == 40211|
+#            zip_code == 40210|zip_code == 40208|zip_code == 40215|zip_code == 40217|
+#            zip_code == 40204|zip_code == 40209|zip_code == 40214)
+hot_spots_map <- get_map(location = "40208", source = 'google',
+                         maptype = 'roadmap', color = 'bw', zoom = 12)
+
+ggmap(hot_spots_map)+
+  stat_bin2d(
+    aes(x = lng, y = lat),
+    data = violent_crime,
+    size = .00001, bins = 20, alpha = .75, color = "gray20"
+  )+
+  facet_wrap(~year)+
+  scale_fill_viridis(option = "inferno", name = "Incident Count")+
+  ggtitle("Louisville Violent Crime, 2005-2016")+
+  density.theme+
+  theme(axis.title = element_blank())+
+  theme(axis.text = element_blank(), axis.ticks = element_blank())
+```
+```{r zip_code_breakdown, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+zip.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 0))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+crime_by_zip <- violent_crime%>%
+  filter(!is.na(zip_code))%>%
+  group_by(zip_code)%>%
+  summarise(count = n())%>%
+  mutate(zip_code = as.factor(zip_code))%>%
+  arrange(desc(count))%>%
+  mutate(percent_of_total = round((count/sum(count))* 100, 2))
+
+crime_by_zip$zip_code <- factor(crime_by_zip$zip_code, levels = crime_by_zip$zip_code[order(crime_by_zip$percent_of_total)])
+```
+
+When we zoom in and break it down by year, we can see a minor, but visible, increase
+in the intensity of the heat map.  Particularly from 2012-2016 we see a brightening
+of intensity in downtown Louisville. In 2016 in particular, it appears that we have 
+expanding the downtown crime bubble ever so slightly, though this would warrent
+further analysis to determine anything concretely. What becomes apparent when viewing 
+these breakdowns though is just how localized the violent crime is.  When broken down by zip
+codes, it is shocking how skewed the numbers are.  Just 6 of Louisville's 66 zip codes
+account for `r round(sum(crime_by_zip$count[1:6])/sum(crime_by_zip$count)*100, 2)`% of 
+all violent crime in Louisville. If we bump that up to the 12 zip codes, we cover
+`r round(sum(crime_by_zip$count[1:12])/sum(crime_by_zip$count)*100, 2)`% of violent crimes.
+
+```{r zip_code_plot, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+ggplot(crime_by_zip, aes(y = percent_of_total, x = zip_code))+
+  geom_bar(stat = 'identity', fill = 'darkblue', alpha = .5)+
+  coord_flip()+
+  ggtitle("Violent Crime by Zip Code")+
+  scale_y_continuous(breaks = 1:12)+
+  labs(x = "Zip Code", y = "Percentage of Total Violent Crime")+
+  zip.theme
+```
+
+## High Crime Zip Codes
+Finally, let's take a quick look at the worst ten zip codes in terms of violent crime and see
+if maybe a change within those areas is why we are seeing marginally higher violent
+crime numbers in the city as a whole.
+
+```{r worst_zip_codes, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+bar.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  # theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0, size = 8))+
+  theme_bw()
+
+worst_zips <- violent_crime%>%
+  filter(zip_code %in% crime_by_zip$zip_code[1:10])%>%
+  group_by(zip_code, year)%>%
+  summarise(count = n())
+
+worst_zips%>%
+  ggplot(aes(x = year, y = count))+
+  stat_smooth(method = 'lm', size = .7, alpha = .4, fill = "grey", colour = "red2")+
+  geom_bar(stat = 'identity', colour = "black",fill = "darkblue",  alpha = .5)+
+  facet_wrap(~zip_code)+
+  ggtitle("Violent Crime in the Ten Highest Crime Zip Codes")+
+  labs(x = "Year", y = "Incident Count")+
+  scale_x_discrete(limits = seq(2005, 2016, by = 1))+
+  bar.theme
+  
+
+```
+
+Examining the plot, we have 4 of the 10 zip codes showing a slight downward trend, with the remaining 6 trending upward.
+Unfortunately, 40211 is in a league of its own, showing a dramatic increase in violent crime since
+2005. With 5 of the 6 top zip codes showing increasing trends, I wanted to determine whether they were 
+the reason for the increase in violent crime. Is violent crime just increasing in those areas
+or is the problem more widespread?
+
+The plot below shows that by excluding the top 6 violent crime zip codes--which, remember, account for nearly 
+50% of all Louisville's violent crime--we actually see a dramatically different picture.
+
+```{r 40211_exclusion, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+bar.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0, size = 8))+
+  theme_bw()
+
+# p4 <- worst_zips%>%
+#   filter(zip_code == 40211)%>%
+#     ggplot(aes(x = year, y = count))+
+#     stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+#     geom_bar(stat = 'identity', colour = "black",fill = "darkblue",  alpha = .5)+
+#     ggtitle("Violent Crime in 40211")+
+#     labs(x = "Year", y = "Incident Count")+
+#     scale_x_discrete(limits = seq(2005, 2016, by = 1))+
+#     bar.theme
+
+
+p4 <- crime_lou%>%
+  filter((nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a'))%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+    ggplot(aes(x = year, y = count))+
+    stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+    geom_bar(stat = 'identity', colour = "black",fill = "darkblue",  alpha = .5)+
+    ggtitle("All Violent Crime")+
+    labs(x = "Year", y = "Incident Count")+
+    scale_x_discrete(limits = seq(2005, 2016, by = 1))+
+    bar.theme
+    
+
+p5 <- crime_lou%>%
+  filter((nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a'), 
+           zip_code != 40211, zip_code != 40203, zip_code != 40212, zip_code !=40214,
+         zip_code !=40215, zip_code != 40210)%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+    ggplot(aes(x = year, y = count))+
+    stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+    geom_bar(stat = 'identity', colour = "black",fill = "darkblue",  alpha = .5)+
+    ggtitle("Violent Crime Excluding Top 6")+
+    labs(x = "Year", y = "Incident Count")+
+    scale_x_discrete(limits = seq(2005, 2016, by = 1))+
+    bar.theme
+    
+grid.arrange(p4, p5, ncol = 2)
+
+daily_sums_by_year_no_top_6 <- crime_lou%>%
+  filter((nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a'), 
+         (zip_code != 40211 & zip_code != 40203 & zip_code != 40212 & zip_code !=40214 & zip_code !=40215 &
+          zip_code != 40210))%>%
+  group_by(year = as.factor(year), yday = as.factor(yday))%>%
+  summarise(count = n())%>%
+  filter(!(yday == 1|yday == 366))
+
+sums_2016_no_top_6 <- daily_sums_by_year_no_top_6%>%
+  filter(year == 2016)
+
+sums_2005_2015_no_top_6 <- daily_sums_by_year_no_top_6%>%
+  filter(year != 2016)
+
+# ggplot(daily_sums_by_year_no_40211%>%filter(year != 2015), aes(x = count, fill = 'darkblue'))+
+#   geom_density(alpha = .4)+
+#   geom_density(data = daily_sums_by_year_no_40211%>%filter(year == 2015), aes(x = count, fill = 'darkred'), 
+#                alpha = .4)+
+#   scale_fill_identity(name = "Years", guide = 'legend', labels = c("2005-2014", "2015"))+
+#   labs(x = "Daily Violent Crime Count", y = "Density")+
+#   density.theme
+
+t <- t.test(sums_2016_no_top_6$count, mu = mean(sums_2005_2015_no_top_6$count))
+```
+
+We go from a very clear increase over the years to essentially a flat trend. If we 
+perform the same t-test as before, we still have a significant finding, but the result 
+is much more borderline.  The 2005-2015 mean of `r round(mean(sums_2005_2015_no_top_6$count), 2)`
+is quite close to falling within the 95% confidence interval in this case.  So we can with 
+reasonable confidence say that violent crime has increased marginally, but for the vast majority of
+Louisville's residents, this increase may not actually be practically significant. Isolated pockets
+within the city are bearing the brunt of this increase, while large portions of the city 
+are left with little to no increase at all.
+
+
+```{r t_test_no_40211, echo = FALSE, cache = TRUE, out.width = "1100px", warning = FALSE, message = FALSE}
+t
+```
+
+# Conclusion
+As with most socioeconomic matters, violent crime in Louisville is difficult to interpret and
+tough to pin down. On the whole, we did seem to have an above average 2016 when compared to the
+previous 11 years. The heavily localized nature of violent crime in the city seems to suggest
+individual citizens outside these areas have little reason to fear for their personal
+safety. When these localized areas are excluded and the remainder of the city is analysed,
+Louisville's violent crime has stayed relatively steady over the past 11 years. While 2016
+*did* have a notable uptick in violent crime, more analysis would be needed to determine whether
+this year was an anomaly or whether this could signal the start of more signifcant 
+cultural or demographic shifts within the city. Perhaps most signifcantly overlooked is the 
+change in population over the period from 2005-2016
+
+
+Whether this marginal trend is cause for alarm is a different 
+matter. City officials may have great cause for concern as 
+several regions of the city have experienced rapid increases in violent crime
+over the past decade. Fractions of downtown account for a vast majority of all violent
+crime in the city and that certainly has devastating economic and social impacts on, not
+only those specific regions, but Louisville as a whole. This is, obviously,
+a very rough sketch of the violent crime landscape, but with further analysis perhaps
+smarter plans for law enforcement could be developed.
+
+It should be noted that this is my first dive into crime data.  Therefore, many
+conventions for dealing with data of this sort have certainly been overlooked.  Blame
+the researcher, not the data itself. Additionally, it should be noted that this report
+can only address crimes contained in the data set.  Put bluntly, it is common knowledge that 
+certain crimes--for instance, rape--often go unreported. Sadly, as far as I could gather, 
+this is just something inherent to crime data sets.  With that said, it is important
+to take all of this analysis with a grain of salt and treat it more as a guideline, rather
+than a ground truth. 
+
+Stay tuned for part two where I begin pilfering the dataset for insight into Louisville's theft problem.
+
+The full code used to generate this report can be found [here](https://github.com/Grollus/LouisvilleCrime/blob/master/Exploring_Violent_Crime_in_Louisville.Rmd).

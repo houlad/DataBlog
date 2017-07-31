@@ -1,0 +1,15 @@
+base
+datasets
+utils
+grDevices
+graphics
+stats
+stringi
+dplyr
+ggplot2
+ggmap
+readr
+printr
+viridisLite
+viridis
+gridExtra
