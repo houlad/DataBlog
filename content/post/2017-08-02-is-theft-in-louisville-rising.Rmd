@@ -254,7 +254,7 @@ theft_crimes%>%
   bar.theme
 ```
 
-##Has there been a significant change?
+## Has there been a significant change?
 As you may have guessed, our decision on whether to normalize the data for population
 changes will have a major influence on the question of significance.  First, compare 
 the normalized versus the unnormalized distributions for 2016 vs 2005-2015.
@@ -502,6 +502,7 @@ sixteen <- theft_crimes%>%
   summarise(count = n())
 gini_16 <- ineq(sixteen$count, type = 'Gini')
 ```
+
 Calculating Gini coefficients for 2007 and 2016, we get `r round(gini_07, 2)` and `r round(gini_16,2)` respectively.
 This decrease indicates that theft offenses have become less unevenly distributed(i.e.,
 thefts are becoming more evenly dispersed through all zip codes). We can vizualize this 
