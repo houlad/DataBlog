@@ -1,0 +1,667 @@
+---
+title: Is Theft in Louisville Rising?
+author: Adam
+date: '2017-08-02'
+slug: is-theft-in-louisville-rising
+categories:
+  - Crime
+  - City Development
+  - Theft
+tags:
+  - R
+  - Mapping
+  - Visualization
+  - Statistics
+---
+
+# Introduction
+Last time, we dove into Louisville's open crime data set to explore the city's
+violent crime.  Today, we examine the vast world of theft/larceny crimes in Louisville.
+In this post, I will explore in more detail the
+idea of crime dispersion. I would like to quantify more rigorously the idea of whether
+crime, specifically theft in this post, is becoming worse everywhere or whether we are 
+only seeing a worsening in localized areas, with a stablization (or even a decrease)
+throughout the rest of the region. To do this, I will borrow ideas from economics and 
+geospatial crime analysis. Without further ado, let's get started.
+
+# Overview of Theft Offenses
+While violent crime had a very narrow scope consisting of 4 major offenses, theft offenses
+cover a much wider range.  Depending on how we want to define it, theft could cover crimes
+as diverse as fraud, motor vehicle theft, bad checks, shoplifting and indentity theft.
+The National Incidence Based Reporting System (NIBRS) classifies 8 crimes(pocket-picking,
+purse-snatching, shoplifting, theft from building, theft from coin-operated machine or device,
+theft from motor vehicle, theft of motor vehicle parts or accessories, and all other larceny)
+as theft/larceny offenses.  The separate crimes of motor vehicle theft and stolen property
+offenses seem to get labeled as theft by the city of Louisville, so we will include those
+offenses in our analysis as well.  Fraud, while obviously related to theft, is given 
+separate treatment in the NIBRS reports and I will defer to them in this instance.
+
+```{r package_load, cache = TRUE, echo = FALSE, message=FALSE, warning = FALSE}
+#Loading all packages necessary for report
+library(stringi)
+library(dplyr)
+library(ggplot2)
+library(ggmap)
+library(readr)
+library(printr)
+library(viridis)
+library(gridExtra)
+```
+
+```{r, load_data_and_base_filter, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# since most data cleaning was done outside this report, all I have to do here is
+# create any useful additional variables and load the file
+raw_data <- read_rds("lou_crime_geocoded_df.rds.gzip")
+
+create_date_variables <- function(df){
+  require(lubridate)
+  # Uses the POSIXct date_occured variable to create useful date related
+  # subvariables
+  df$year <- year(df$date_occured)
+  df$month <- month(df$date_occured)
+  df$day <- day(df$date_occured)
+  df$hour <- hour(df$date_occured)
+  df$year_month <- paste(df$year, df$month, sep = '-')
+  df$day_of_week <- wday(df$date_occured, label = TRUE, abbr = FALSE)
+  df$weekday <- ifelse(df$day_of_week == "Saturday" | df$day_of_week == "Sunday", 
+                              "Weekend", "Weekday")
+  df$yday <- yday(df$date_occured)
+  
+  return(df)
+}
+
+crime_lou <- create_date_variables(raw_data)
+# Filter out records with no lat/lng coords and those from desired time period
+crime_lou <- crime_lou%>%
+  filter(year <=2016 & year >=2005 & !is.na(lat)  & !is.na(lng))
+```
+
+Let's start in the same manner as last time by taking a broad view of theft over the years.
+
+```{r, overall_trend_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# Base theme for all bar charts
+bar.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+# Filtering full crime dataset to the 10 theft classifications we will deal with in this report
+theft_codes <- c(paste0("23", letters[seq(from = 1, to = 8)]), "240", "280")
+theft_crimes <- crime_lou%>%
+  filter(nibrs_code %in% theft_codes)
+
+# Census data used to normalize by population 
+#gathered from https://factfinder.census.gov/faces/tableservices/jsf/pages/productview.xhtml?src=CF
+lou_pop <- data.frame(year = 2005:2016, 
+                      population = c(569819, 574514, 581388, 587675, 593419, 597337,
+                                     600425, 604609, 609863, 612367, 614748, 616261))
+theft_crimes <- left_join(theft_crimes, lou_pop, by = 'year')
+
+#adding more detailed offense descriptions
+nibrs_offenses <- data.frame(nibrs_offenses = c("Arson", "Aggravated Assault", "Simple Assault", "Intimidation",
+                                                "Bribery", "Burglary/B&E", "Counterfeiting/Forgery", "Destruction/Damage/Vandalism of Property",
+                                                "Drug/Narcotic Violations", "Drug/Narcotic Equip. Violations",
+                                                "Embezzlement", "Extortion/Blackmail", "False Pretenses/Swindle/Confidence Games",
+                                                "Credit Card/Automatic Teller Machine Fraud", "Impersonation",
+                                                "Welfare Fraud", "Wire Fraud", "Betting/Wagering", "Operating/Promoting/Assisting Gambling",
+                                                "Gambling Equip. Violations", "Sports Tampering", "Murder/Non-Negligent Manslaughter",
+                                                "Negligent Manslaughter", "Justifiable Homicide", "Commercial Sex Acts",
+                                                "Involuntary Servitude", "Kidnapping/Abduction", "Pocket Picking",
+                                                "Purse Snatching", "Shoplifting", "Theft from Building", "Theft from Coin-Operated Machine or Device",
+                                                "Theft from Motor Vehicle", "Theft of Motor Vehicle Parts or Accessories",
+                                                "All Other Larceny"," Motor Vehicle Theft", "Pornography/Obscene Material",
+                                                "Prostitution", "Assisting or Promoting Prostitution", "Purchasing Prostitution",
+                                                "Robbery", "Rape", "Sodomy", "Sexual Assault with An Object", "Forcible Fondling",
+                                                "Incent", "Statutory Rape", "Stolen Property Offenses", "Weapon Law Violations", 
+                                                "Bad Checks", "Curfew/Loitering/Vagrancy Violations", "Disorderly Conduct",
+                                                "Driving Under the Influence", "Drunkenness", "Family Offenses, Non-Violent",
+                                                "Liquor Law Violations", "Peeping Tom", "Runaway", "Tresspassing", "All Other Offenses"),
+                             nibrs_code = c("200", "13A", "13B", "13C", "510", "220", 
+                                             "250", "290", "35A", "35B", "270", "210", 
+                                             "26A", "26B", "26C", "26D", "26E", "39A", 
+                                             "39B", "39C", "39D", "09A", "09B", "09C",
+                                             "64A", "64B", "100", "23A", "23B", "23C", 
+                                             "23D", "23E", "23F", "23G", "23H", "240",
+                                             "370", "40A", "40B", "40C", "120", "11A",
+                                             "11B", "11C", "11D", "36A", "36B", "280",
+                                             "520", "90A", "90B", "90C", "90D", "90E",
+                                             "90F", "90G", "90H", "90I", "90J", "90Z"))
+nibrs_offenses$nibrs_code <- tolower(nibrs_offenses$nibrs_code)
+theft_crimes$nibrs_code <- as.factor(theft_crimes$nibrs_code)
+theft_crimes <- left_join(theft_crimes, nibrs_offenses, by = 'nibrs_code')
+
+theft_crimes%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  geom_bar(stat = 'identity', fill = 'darkblue', alpha = .5, color = 'black')+
+  stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+  ggtitle("Number of Thefts, By Year")+
+  labs(x = "Year", y = "Incident Count")+
+  scale_x_discrete(limits = seq(2005, 2016, by = 1))+
+  bar.theme
+```
+
+
+```{r percentage_change_table, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+all_theft_changes <- theft_crimes%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+  mutate(crime_type = 'theft_offenses',
+         Change_from_2015 = paste0(round(100*((count /lag(count))-1), 1), "%"),
+         Change_from_Max = paste0(round(100*((count /max(count))-1), 1), "%"),
+         Change_from_Mean = paste0(round(100*((count /mean(count))-1), 1), "%"))%>%
+  filter(year == 2016)%>%
+  select(crime_type, Change_from_2015, Change_from_Max, Change_from_Mean)
+```
+At first glance, it appears that thefts are up a modest amount. 2016 thefts are up from the 12
+year mean by `r all_theft_changes$Change_from_Mean`. This definitely seems significant, but before
+jumping to conclusions, we should probably do a bit more analysis.
+
+```{r percentage_change_table2, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+all_theft_changes
+```
+
+As usual, it is very informative to view the distribution of thefts, in this case by day,
+to check for anything unusual.  
+```{r overall_distribution_plots, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# Base themes for histogram and density plots
+hist.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 16, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 12, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+density.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 16, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 12, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+# create daily counts of theft offenses. First day of the year excluded as there
+# seems to be some systemic reason causing offenses on this day to be significantly
+# higher
+lou_pop_factors <- lou_pop
+lou_pop_factors$year <- as.factor(lou_pop_factors$year)
+daily_sums_by_year <- theft_crimes%>%
+  group_by(year = as.factor(year), yday = as.factor(yday))%>%
+  summarise(count = n())%>%
+  filter(yday != 1)%>%
+  left_join(lou_pop_factors, by = "year")
+
+p1 <- ggplot(daily_sums_by_year, aes(x = count))+
+  geom_histogram(bins = 26, fill = 'darkblue', alpha = .5)+
+  labs(x = "Number of Thefts/Day", y = "Frequency")+
+  hist.theme
+
+p2 <- ggplot(daily_sums_by_year, aes(x = count))+
+  geom_density(fill = 'darkblue', alpha = .5)+
+  stat_function(fun = dnorm,
+                color = "red", linetype = 2, size = 1,
+                args = list(mean = mean(daily_sums_by_year$count), sd = sd(daily_sums_by_year$count)))+
+  labs(x = "Number of Thefts/Day", y = "Density")+
+  density.theme
+grid.arrange(p1, p2, ncol = 2)  
+```
+
+From the plots above, we can see that the data is very close to being normally
+distributed. There is perhaps a very(very) slight right skew with a fat tail, but it
+is so minor that we can treat our data as normal and gain the benefit of those
+assumptions in our modeling.
+
+```{r individual_year_sums,echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE }
+sums_2016 <- daily_sums_by_year%>%
+  filter(year == 2016)%>%
+  mutate(pop_adjusted = (count/population)*100000)
+sums_2010 <- daily_sums_by_year%>%
+  filter(year == 2010)%>%
+  mutate(pop_adjusted = (count/population)*100000)
+sums_2005_2015 <- daily_sums_by_year%>%
+  filter(year != 2016)%>%
+  mutate(pop_adjusted = (count/population)*100000)
+```
+The distributions also give us our first sense of how prevalant thefts are with an average of
+`r round(mean(daily_sums_by_year$count), 1)` thefts per day. Looking at two specific years,
+say 2010(the last available census year) and 2016, we see an increase from `r round(mean(sums_2010$count),1)` 
+to `r round(mean(sums_2016$count), 1)` thefts per day. However, if we normalize for the population
+increase using US census [data](https://www.census.gov/quickfacts/table/PST045214/21111),
+and view it in more relateable units(# of thefts per 100,000 people per day), this increase seems much smaller
+-- `r round(mean(sums_2010$pop_adjusted),1)` in 2010 to `r round(mean(sums_2016$pop_adjusted),1)` in 2016.
+This ignores many of the complexities inherent to normalizing data for population(e.g., at what level should 
+you normalize? City wide? Zip Code? City Block?) but does provide a glimpse into just how nebulous this sort 
+of analysis can be. In fact, when we normalize the yearly theft counts we see a plot with a significantly
+flatter trend line, indicating a smaller rise in the number of thefts.
+```{r normalized_yearly_count,echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE }
+
+theft_crimes%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+  left_join(lou_pop, by = "year")%>%
+  mutate(pop_adjusted = (count/population)*100000)%>%
+  ggplot(aes(x = year, y = pop_adjusted))+
+  geom_bar(stat = 'identity', fill = 'darkblue', alpha = .5, color = 'black')+
+  stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+  ggtitle("Thefts/100,000 people(Normalized), By Year")+
+  labs(x = "Year", y = "Incident Count")+
+  scale_x_discrete(limits = seq(2005, 2016, by = 1))+
+  bar.theme
+```
+
+##Has there been a significant change?
+As you may have guessed, our decision on whether to normalize the data for population
+changes will have a major influence on the question of significance.  First, compare 
+the normalized versus the unnormalized distributions for 2016 vs 2005-2015.
+```{r, distribution_2016_vs_2005_2015, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# ggplot(daily_sums_by_year, aes(x = count))+
+#   geom_density(fill = "darkblue", alpha = .5)+
+#   facet_wrap(~year)+
+#   labs(x = "Daily Theft Offense Count", y = "Density")+
+#   density.theme
+
+p3 <- ggplot(sums_2005_2015, aes(x = count, fill = 'darkblue'))+
+  geom_density(alpha = .4)+
+  geom_density(data = sums_2016, aes(x = count, fill = 'darkred'), 
+               alpha = .4)+
+  scale_fill_identity(name = "Years", guide = 'legend', labels = c("2005-2015", "2016"))+
+  labs(x = "# of Thefts/Day (Unnormalized)", y = "Density")+
+  density.theme+
+  theme(axis.title = element_text(size = 10))+
+  theme(legend.position = "bottom")
+
+p4 <- ggplot(sums_2005_2015, aes(x = pop_adjusted, fill = 'darkblue'))+
+  geom_density(alpha = .4)+
+  geom_density(data = sums_2016, aes(x = pop_adjusted, fill = 'darkred'), 
+               alpha = .4)+
+  scale_fill_identity(name = "Years", guide = 'legend', labels = c("2005-2015", "2016"))+
+  labs(x = "Thefts/100,000 People (Normalized)", y = "Density")+
+  density.theme+
+  theme(axis.title = element_text(size = 10))+
+  theme(legend.position = "bottom")
+grid.arrange(p3, p4, ncol = 2)
+```
+
+Viewing the distributions, it is pretty clear that 2016 was a unique year. Both the normalized and 
+unnormalized distributions are right shifted from the 11 year average. The 2016 distribution is also 
+narrower and higher peaked. These two facts seem to indicate two things-- one, the number of thefts per 
+day has increased regardless of whether or not you normalized the data and two, there are more
+high theft days occurring than before. The differing shape of these distributions is actually somewhat
+troubling for our analysis, but warrents a post of its own.  For now, we are going to work with 
+the assumption that the distributions are similar enough in shape to allow for the use of a 
+t-test to compare means.
+
+When we perform these t-tests, we unsurprisingly find that they indicate significant changes in the means
+of both the normalized and unnormalized data. Both data sets have p-values less than 2.2e-16(tiny!), meaning
+we reject the null hypothesis that the means are equal.  When you look at the confidence intervals for 
+both, you see the means of the 2005-2015 data both fall well under the lower bound.
+
+```{r t_tests, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+t.test(sums_2016$count, mu = mean(sums_2005_2015$count))
+t.test(sums_2016$pop_adjusted, mu = mean(sums_2005_2015$pop_adjusted))
+```
+
+This set of tests is only a first, rough, step, but it does give us an idea of what we are
+dealing with. It appears 2016 saw a significant increase in thefts over the 11 year average.
+After normalization for population increases, we are seeing on average about 1 more theft
+per day per 100,000 people. This works out to about 6 more thefts per day when normalized.
+However, as usual, this sort of analysis needs some perspective. As mentioned above, the 
+shapes of the distributions differ quite a bit. T-tests rely on distributions differing
+only in central tendency(i.e. the mean).  If this assumption is violated, then our t-tests 
+may not be accurate. There are some additional problems with using t-tests to compare central
+tendancy in this crime example, but they are more detail than is wanted for this post. Perhaps
+I will address these in a later post. For now, it is reasonable safe to conclude that thefts in 2016
+were higher by a statistically significant amount.  
+
+### Why all the shoplifting?
+While exploring the data, I noticed that a huge portion of thefts were shoplifting. While
+this makes sense, it got me wondering if there has been a difference between thefts committed 
+against individual people and those committed against businesses. While not a perfect proxy,
+if we look at the primary business related theft--shoplifting--verse all other thefts, we can
+gain some more insight.
+
+```{r business_v_personal, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+business_thefts <- theft_crimes%>%
+  filter(nibrs_offenses.x == 'Shoplifting')
+
+personal_thefts <- theft_crimes %>%
+  filter(nibrs_offenses.x != 'Shoplifting')
+
+bus1 <- business_thefts%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  geom_bar(stat = 'identity', fill = 'darkblue', alpha = .5, color = 'black')+
+  stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+  ggtitle("# of Business Thefts, By Year")+
+  labs(x = "Year", y = "Incident Count")+
+  scale_x_discrete(limits = seq(2005, 2016, by = 2))+
+  bar.theme
+
+per1 <- personal_thefts%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  geom_bar(stat = 'identity', fill = 'darkblue', alpha = .5, color = 'black')+
+  stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+  ggtitle("# of Personal Thefts, By Year")+
+  labs(x = "Year", y = "Incident Count")+
+  scale_x_discrete(limits = seq(2005, 2016, by = 2))+
+  bar.theme
+grid.arrange(bus1, per1, ncol = 2)
+```
+
+
+So it is obvious that business thefts are trending upward, but it is not as readily
+apparent with personal thefts.  The trend is clearly upward, but this seems due to
+the large spike in 2016. So this lends evidence to the fact that thefts--especially against
+persons--were up in 2016. However, looking at the longer term trend it seems like a sharp
+rise in shoplifting could be driving a lot of the increased theft numbers. I don't want
+to go too off on a tangent exploring this, but it needed to be noted.  One first question
+I have is whether prosecution of shoplifters was changed in some way between 2005 and the 
+present.  The sharp uptick seems like something that could be explained by a change
+in the laws surrounding the crime. If you know anything about it, feel free to send
+me an email!
+
+# Mapping Theft Locations
+Mapping theft locations provides a good understanding of the distribution of theft
+throughout the city.  We can immediately see that, as with violent crime, the major 
+hot spot is centered downtown. Presumably this has something to do with the population
+density being higher downtown, but I will not delve into that issue today.
+
+Instead, I want to briefly look at the dispersion throughout the city. If you look carefully at the
+map, you will notice that despite the obvious hotspot downtown, we still have color
+feathering into the far corners of the city. There are also several isolated 'blocks' of high
+activity (indicated by the yellows and orange/salmon colors) that are located well outside 
+what I would consider downtown Louisville. Two of those--labeled in red--are locations
+of shopping malls which, understandably, have higher levels of shoplifting/theft.  The other
+two areas are less obvious. After some investigation, the high count block west of Heritage
+Creek seems to be a high theft storage facility. The block up by Pewee Valley seems to be
+a result of lazy record keeping.  Instead of specific block addresses for crimes in that
+area(zip code 40056), most of the entries were just given a 'community at large' address.
+When the geocoding was done, this resulted in thousands of identical coordinates which then 
+spawned a high incidence count block.
+
+```{r mapping, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+louisvilleMap <- get_map(location = c(lon = -85.686028, lat = 38.181602), source = "google",
+                       maptype = 'roadmap', color = 'bw', zoom = 11)
+
+ggmap(louisvilleMap)+
+  stat_bin2d(
+    aes(x = lng, y = lat),
+    data = theft_crimes,
+    size = .00001, bins = 30, alpha = .75#, color = "gray20"
+  )+
+  annotate("text", x = -85.59, y = 38.257, color = "red3",
+           size = 3,label = "St. Matthews and Oxmoor Mall")+
+  annotate("text", x = -85.65, y = 38.131, color = "red3",
+           size = 3, label = "Jefferson Mall")+
+  annotate("text", x = -85.78, y = 38.12, color = "red3",
+           size = 3, label = "Storage Facility")+
+  scale_fill_viridis(option = "inferno", name = "Incident Count")+
+  ggtitle("Louisville Theft Offenses, 2005-2016")+
+  density.theme+
+  theme(axis.title = element_blank())+
+  theme(axis.text = element_blank(), axis.ticks = element_blank())
+
+# ggmap(louisvilleMap)+
+#   stat_bin2d(
+#     aes(x = lng, y = lat),
+#     data = theft_crimes,
+#     size = .00001, bins = 40, alpha = .75, color = "gray20"
+#   )+
+#   facet_wrap(~year)+
+#   scale_fill_viridis(option = "inferno", name = "Incident Count")+
+#   ggtitle("Louisville Theft Offenses, 2005-2015")+
+#   density.theme+
+#   theme(axis.title = element_blank())+
+#   theme(axis.text = element_blank(), axis.ticks = element_blank())
+
+# ggmap(louisvilleMap)+
+#   stat_bin2d(
+#     aes(x = lng, y = lat),
+#     data = theft_crimes,
+#     size = .00001, bins = 20, alpha = .75#, color = "gray20"
+#   )+
+#   facet_wrap(~hour)+
+#   scale_fill_viridis(option = "inferno", name = "Incident Count")+
+#   ggtitle("Louisville Theft Offenses, 2005-2015")+
+#   density.theme+
+#   theme(axis.title = element_blank())+
+#   theme(axis.text = element_blank(), axis.ticks = element_blank())
+```
+
+### Analysis of Theft Dispersal
+Since our map seems to indicate a wider dispersal of thefts, looking at theft counts by
+zip code should be informative.
+```{r zip_code_breakdown, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+zip.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 0))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme(axis.text.y = element_text(size = 8))+
+  theme_bw()
+
+crime_by_zip <- theft_crimes%>%
+  filter(!is.na(zip_code))%>%
+  group_by(zip_code)%>%
+  summarise(count = n())%>%
+  mutate(zip_code = as.factor(zip_code))%>%
+  arrange(desc(count))%>%
+  mutate(percent_of_total = round((count/sum(count))* 100, 2))
+
+crime_by_zip$zip_code <- factor(crime_by_zip$zip_code, levels = crime_by_zip$zip_code[order(crime_by_zip$percent_of_total)])
+
+ggplot(crime_by_zip, aes(y = percent_of_total, x = zip_code))+
+  geom_bar(stat = 'identity', fill = 'darkblue', alpha = .5)+
+  coord_flip()+
+  ggtitle("Theft Offenses by Zip Code")+
+  scale_y_continuous(breaks = 1:12)+
+  labs(x = "Zip Code", y = "Percentage of Total Thefts")+
+  zip.theme
+```
+
+Surprisingly, the highest crime zip codes are not in downtown Louisville at all, but are 
+more in the south and west end of Louisville. There are still several downtown zip codes--
+particularly 40202 and 40203 which are located at the bright yellow area of our heat map--
+near the top of the plot, but we can see evidence that thefts are more evenly 
+dispersed throughout the community. While just 6 of Louisville's 33 zip codes
+accounted for 48.75% of all violent crime, it takes 9 to cover `r round(sum(crime_by_zip$percent_of_total[1:9]),2)`%
+of thefts.
+
+But this sort of discussion is not particularly rigorous and, frankly, is a little
+unsatisfying. Luckily, there are entire fields devoted to the study of dispersion.  In 
+economics, it is common to measure income related inequality using the Gini coefficient and
+Lorenz curve(a good introduction can be found [here](https://en.wikipedia.org/wiki/Gini_coefficient) and
+[here](https://en.wikipedia.org/wiki/Lorenz_curve)). These techniques have also been applied
+to identify unequal distributions in crime frequencies. For our purposes, we will measure
+the inequality in the frequency distribution of thefts by zip code.  A Gini coefficient
+of 1 indicates maximum inequality(in our case this would be all of the thefts taking place
+in one zip code) while a coefficient of 0 indicates complete equality (thefts are evenly
+dispersed throughout all zip codes). 
+
+```{r gin_analysis, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+library(ineq)
+
+o_seven <- theft_crimes%>%
+  filter(year == 2007)%>%
+  group_by(zip_code)%>%
+  summarise(count = n())
+gini_07 <- ineq(o_seven$count, type = 'Gini')
+
+sixteen <- theft_crimes%>%
+  filter(year == 2016)%>%
+  group_by(zip_code)%>%
+  summarise(count = n())
+gini_16 <- ineq(sixteen$count, type = 'Gini')
+```
+Calculating Gini coefficients for 2007 and 2016, we get `r round(gini_07, 2)` and `r round(gini_16,2)` respectively.
+This decrease indicates that theft offenses have become less unevenly distributed(i.e.,
+thefts are becoming more evenly dispersed through all zip codes). We can vizualize this 
+with a Lorenz curve. If crimes were completely evenly distributed, they would fall on the
+diagonal 'line of equality'. The further below the curved line bows, the more unequal 
+the data. As you can see, the 2016 curve falls slightly inside of the 2007 curve, indicating lower inequality.
+So, for example, we can see that the bottom 50% of zip codes account for 28% or 25% of the
+thefts, depending on the year. This solidifies the idea we saw above where a fraction
+of zip codes accounted for a disproportionate percentage of the total thefts.
+```{r lorenz_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+plot(Lc(o_seven$count))
+lines(Lc(sixteen$count), col = 'red')
+legend(.8, .5,c(2007, 2016),lty = c(1, 1), col = c("black", "red"), lwd = c(2.5, 2.5))
+abline(v = .5, h = c(.28,.25), col = 'blue', lty = 2)
+text(x = .47, y = .31, labels = '.28')
+text(x = .535, y = .22, labels = '.25')
+```
+
+While this measure is a good start, it is a global measure of unequal distribution when
+what we would like is something more localized. A more crime specific measure that is a step
+in this direction is called the Offense Dispersion Index(ODI). When looking at the crime
+increase between two years, we first calculate the difference in each area---in our case between
+zip codes. Then, we order these differences from highest to lowest change. Finally,
+we remove the highest ranking area and recalculate the crime rate with the remaining
+areas. Then we take the second highest ranked area and remove it, again recalculating,
+but for the n-2 areas. This continues until only one area is left.
+
+From this procedure we can calculate the ODI, which is just the proportion of areas that must be removed
+from the calculation before the increase in crime turns into no-change or a decrease in crime.
+So as you can see in the table below, it takes the removal of 14 zip codes worth of data
+to change the increase in crime rate from 2007 to 2016 into a decrease. So the ODI is
+just 14 divided by the total number of zip codes, 33, or `r round(14/33, 2)`.  ODI's range
+from 0 to 1 with values close to zero indicating a low crime increase dispersion factor.
+In other words, a value closer to 1 suggests suggests a problem across all areas, rather
+than something very localized. To compare, I calculated the ODI for drug crimes in Louisville
+to be `r round(33/33, 2)`. Since drug crimes were at nearly an all time high in 2007, we actually
+have an immediate decrease in crime with the first zip code. This suggests that, relative to drug crimes,
+theft remains relatively localized. Alarmingly, drug crimes appear to be widely dispersed throughout the
+community. 
+
+```{r ODI_analysis, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# 2007 to 2016
+change_by_zip <- theft_crimes%>%
+  filter((year == 2007|year == 2016) & !is.na(zip_code))%>%
+  filter(zip_code != 40201)%>%
+  group_by(zip_code = as.character(zip_code), year)%>%
+  summarise(count = n())%>%
+  mutate(year = paste('year', year, sep = "_"))%>%
+  tidyr::spread(year, count)%>%
+  mutate(difference = year_2016-year_2007)%>%
+  ungroup()%>%
+  arrange(desc(difference))
+  
+dispersion_df<- change_by_zip%>%
+  mutate(thefts_2007 = sum(change_by_zip$year_2007) - cumsum(year_2007),
+         thefts_2016 = sum(change_by_zip$year_2016) - cumsum(year_2016))%>%
+  mutate(change_after_zip_removal = round((((thefts_2016/thefts_2007)-1)*100), 2))%>%
+  arrange(desc(change_after_zip_removal))%>%
+  select(zip_code, thefts_2007, thefts_2016, change_after_zip_removal)
+
+
+full_change <- data.frame(zip_code = "all", thefts_2007 = sum(change_by_zip$year_2007), 
+                                  thefts_2016 = sum(change_by_zip$year_2016),
+                                  change_after_zip_removal=round(((sum(change_by_zip$year_2016)/sum(change_by_zip$year_2007))-1)*100,2))
+ODI_df <- rbind(full_change, dispersion_df)
+
+head(ODI_df)
+
+
+
+# Drug crime ODI
+drug_crime <- crime_lou%>%
+  filter(nibrs_code == '35a' |nibrs_code == '35b')
+drug_by_zip <- drug_crime%>%
+  filter((year == 2007|year == 2016) & !is.na(zip_code))%>%
+  group_by(zip_code = as.character(zip_code), year)%>%
+  summarise(count = n())%>%
+  mutate(year = paste('year', year, sep = "_"))%>%
+  tidyr::spread(year, count)%>%
+  mutate(difference = year_2016-year_2007)%>%
+  ungroup()%>%
+  arrange(desc(difference))%>%
+  filter(!is.na(year_2007) & !is.na(year_2016))
+  
+drug_dispersion<- drug_by_zip%>%
+  mutate(drug_crimes_2007 = sum(drug_by_zip$year_2007) - cumsum(year_2007),
+         drug_crimes_2016 = sum(drug_by_zip$year_2016) - cumsum(year_2016))%>%
+  mutate(change_after_zip_removal = round((((drug_crimes_2016/drug_crimes_2007)-1)*100), 2))%>%
+  arrange(desc(change_after_zip_removal))%>%
+  select(zip_code, drug_crimes_2007, drug_crimes_2016, change_after_zip_removal)
+
+
+drug_change <- data.frame(zip_code = "all", drug_crimes_2007 = sum(drug_by_zip$year_2007), 
+                                  drug_crimes_2016 = sum(drug_by_zip$year_2016),
+                                  change_after_zip_removal=round(((sum(drug_by_zip$year_2016)/sum(drug_by_zip$year_2007))-1)*100,2))
+drug_ODI <- rbind(drug_change, drug_dispersion)
+head(drug_ODI)
+```
+
+One additional measure worth mentioning is the non-contributory dispersion index(NCDI).
+The NCDI is the proportion of areas that showed crime increases divided by the total number
+of areas.  Unlike the ODI ratio--which only uses areas that contributed to the overall crime
+increase--the NCDI looks at all areas that showed increases and can thus be used to show 
+the spread of areas showing increases. For our theft and drug data, we see `r round(27/33, 2)`
+and `r round(12/33, 2)` NCDI ratios, respectively. The high NCDI on theft crimes indicates 
+an increase in theft crimes in many areas. When combined with a mid-range ODI it seems
+that while theft is still relatively localized, it appears to be spreading to new areas.
+On the other hand, the lower NCDI of drug crimes combined with the extremely high ODI
+probably means that drugs are so evenly dispersed throughout the area already that further increases in
+these high drug crime areas are unlikely.
+
+It must be noted that both ODI and NCDI measures are first, rudimentary, steps into 
+quantifying crime dispersion.  Much more advanced techniques which take full advantage
+of spatial analysis can provide significantly more detail on localized variation in crime
+patterns. These are far beyond the scope of this post, but with a little more work the ODI
+measures we calculated here can be combined with other techniques for more specific 
+analysis. If you are interested, a good starting point is located [here](http://www.jratcliffe.net/wp-content/uploads/Ratcliffe-2010-The-spatial-dependency-of-crime-increase-dispersion.pdf).
+This whitepaper was the inspiration behind much of this analysis and a full aknowledgement 
+of the use of its ideas is essential.
+```{r zip_code_changes, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# crime_by_zip <- theft_crimes%>%
+#   filter(!is.na(zip_code) & zip_code != 40201&zip_code != 40225)%>%
+#   group_by(zip_code, year)%>%
+#   summarise(count = n())%>%
+#   filter(year == 2005|year == 2015)%>%
+#   mutate(change = count-lag(count))%>%
+#   filter(year == 2015)
+# 
+# map_df <- crime_by_zip%>%
+#   mutate(region = as.character(zip_code), value = change)%>%
+#   select(region, value)
+# choroplethrZip::zip_choropleth(map_df, zip_zoom = map_df$region)+
+#   scale_fill_brewer(palette = 6, name = "Change in Theft Count")+
+#   ggtitle("Change in Theft Count, 2005 v 2015")+
+#   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+#   theme(legend.title = element_text(size = 14, family = 'serif', face = 'bold', color = '#666666'))+
+#   theme(legend.text = element_text(size = 12, family = 'serif', face = 'bold', color = '#666666'))
+```
+
+# Conclusion
+This first look into theft in Louisville does provide evidence for reasoned concern. While 
+theft doesn't appear to be shooting through the roof, there *has* been a noticable increase
+this past year that is not strictly localized.  While *most* theft does take place in certain areas,
+these areas are not static and there is at least some evidence that these areas are expanding
+to new parts of the city.
+
+However, a small fraction of the city still bears the burden of the vast majority of
+thefts. On the one hand, this could be an effect of enforcement policies. It seems entirely
+possible that, especially given the tightening
+metropolitan budgets, instead of policing within hotspot regions it is easier to police the zone
+around them in an attempt to quarantine crime to these small regions. This could potentially
+be more cost effective for the city.  But, as we saw in the intial look at the dispersion of thefts,
+it is dubious that this policy is working if it is in fact being used.
+
+On the other hand, it could be that patrols do police these areas frequently, but there 
+are tangible demographic, infrastructure and economic factors overrepresented in these regions 
+that drive up crime. For instance, an interesting next step could be to look at the spatial
+correlation between theft crime and drug crime to see if, perhaps, drug addiction is 
+driving up thefts. If this is the case, then, unfortunately, the fix is more difficult
+than something simple like increasing police presence in the area.
+
+
+Till next time!
