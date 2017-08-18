@@ -3,8 +3,8 @@ relativeurls = true
 languageCode = "en-us"
 title = "A blog analyzing stuff, using data"
 theme = "hugo-lithium-theme"
-googleAnalytics = "@adamhoulette"
-disqusShortname = ""
+googleAnalytics = ""
+disqusShortname = "@adamhoulette"
 ignoreFiles = ["\\.Rmd$", "_files$", "_cache$"]
 
 [permalinks]
