@@ -4,7 +4,7 @@ languageCode = "en-us"
 title = "A blog analyzing stuff, using data"
 theme = "hugo-lithium-theme"
 googleAnalytics = ""
-disqusShortname = "adamh.netlify.com"
+disqusShortname = "datablog-1"
 ignoreFiles = ["\\.Rmd$", "_files$", "_cache$"]
 
 [permalinks]
