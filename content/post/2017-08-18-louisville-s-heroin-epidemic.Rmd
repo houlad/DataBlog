@@ -28,7 +28,7 @@ visualize Louisville's heroin problem to see if I could gain any insight.  Is th
 How fast did this become a problem? And probably most important to the average person, is this actually happening near me? 
 Sadly, the answers appear to be 'Yes', 'Quickly', and 'Absolutely'. 
 
-```{r package_load, cache = TRUE, echo = FALSE, message=FALSE, warning = FALSE}
+```{r package_load, cache = F, echo = FALSE, message=FALSE, warning = FALSE}
 #Loading all packages necessary for report
 library(stringi)
 library(dplyr)
@@ -48,7 +48,7 @@ library(grid)
 ### Overview of Various Drug Offenses
 
 
-```{r, load_data_and_base_filter, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+```{r, load_data_and_base_filter, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE}
 # Original dataset is found here (http://portal.louisvilleky.gov/dataset/crimedataall-data)
 # Geocoding and intial cleaning/formatting process can be found at
 # https://github.com/Grollus/LouisvilleCrime/blob/master/louisville_raw_data_and_geocoding.R
@@ -82,7 +82,7 @@ crime_lou <- crime_lou%>%
 ```
 
 
-```{r, theme_and_drug_filter, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+```{r, theme_and_drug_filter, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE}
 # Base theme for all bar charts
 bar.theme <- 
   theme(legend.position = "none")+
@@ -140,7 +140,7 @@ those of meth and other opiates, even though we are seeing large increases in cr
 to those drugs too!
 
 
-```{r, increasing_drugs_bar_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "100%"}
+```{r, increasing_drugs_bar_plot, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE, out.width = "100%"}
 drug_offenses %>%
   filter(year >= 2007, drug != "Marijuana" & drug != "Cocaine" & drug != "Other")%>%
   group_by(year, drug)%>%
@@ -171,7 +171,7 @@ to cocaine and marijuana(*-`r round(per_change_cocaine$count[2]/per_change_cocai
 *-`r round(per_change_marijuana$count[2]/per_change_marijuana$count[1]* 100, 0)`%* respectively)
 over the same period of time.  
 
-```{r, decreasing_drugs_bar_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "100%"}
+```{r, decreasing_drugs_bar_plot, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE, out.width = "100%"}
 drug_offenses %>%
   filter(year >= 2007, drug == "Marijuana"| drug == "Cocaine")%>%
   group_by(year, drug)%>%
@@ -198,7 +198,7 @@ drug_offenses %>%
 In fact, if we look at a plot of all recreational drug offenses, we see a slight trend 
 downward over the past decade.
 
-```{r,all_rec_drug_offenses, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "100%"}
+```{r,all_rec_drug_offenses, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE, out.width = "100%"}
 drug_offenses %>%
   filter(year >= 2007)%>%
   group_by(year)%>%
@@ -220,7 +220,7 @@ drug_offenses %>%
 
 ```
 
-```{r diff_mari_heroin, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+```{r diff_mari_heroin, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE}
 times_more_mary_v_heroin <- drug_offenses%>%
   filter(drug == 'Heroin'|drug == 'Marijuana', year == 2016)%>%
   group_by(drug)%>%
@@ -234,7 +234,7 @@ As of 2016 we still had `r round(times_more_mary_v_heroin$count[2]/times_more_ma
 times more marijuana offenses than heroin offenses.
 
 
-```{r, marijuana_v_heroin_bar, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width="100%"}
+```{r, marijuana_v_heroin_bar, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE, out.width="100%"}
 drug_offenses %>%
   filter(year >= 2007, drug == "Marijuana"|drug == "Heroin")%>%
   group_by(year, drug)%>%
@@ -282,7 +282,7 @@ a surge in heroin demand as a replacement.
 
 
 
-```{r, overdose_heroin_correlation, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+```{r, overdose_heroin_correlation, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE}
 overdose <- crime_lou%>%
   filter(uor_desc == 'overdose'|stri_detect_regex(uor_desc, "heroin"))%>%
   mutate(Category = ifelse(stri_detect_regex(uor_desc, 'heroin') == TRUE, "Offenses", "Overdoses"))%>%
@@ -321,7 +321,7 @@ if they aren't related.
 
 
 
-```{r overdose_bar_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "100%"}
+```{r overdose_bar_plot, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE, out.width = "100%"}
 overdose%>%
   filter(year >= 2007)%>%
   ggplot(aes(x = year, y = count))+
@@ -370,7 +370,7 @@ of formatting(huge thanks to [Timo Grossenbacher](https://timogrossenbacher.ch/2
 and his brilliant post on formatting clean choropleth plots)
 we can easily see the spread of heroin use through the city.
 
-```{r heroin_choropleth_multiples, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "100%"}
+```{r heroin_choropleth_multiples, echo = FALSE, cache = FALSE, warning = FALSE, message = FALSE, out.width = "100%"}
 #load zip population data for normalized plot
 # editting value for 40118 manually with data from 
 # https://factfinder.census.gov/faces/nav/jsf/pages/community_facts.xhtml
@@ -591,7 +591,7 @@ extendLegendWithExtremes(q, "heroin_map_0716")
 
 ```
 
-```{r greater_than, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE}
+```{r greater_than, echo = FALSE, message = FALSE, cache = FALSE, warning = FALSE}
 greater_than <- heroin_zip%>%
   filter(year == 2016)%>%
   mutate(greater_than = ifelse(value >=26, TRUE, FALSE))
@@ -603,7 +603,7 @@ the near immediate darkening of the west and south end in 2012 took me by surpri
 that saw at least 1 heroin crime per week.  In 40203, they saw a heroin crime every `r round(365/143, 1)`
 days! 
 
-```{r biggest_change_zip_codes, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE}
+```{r biggest_change_zip_codes, echo = FALSE, message = FALSE, cache = FALSE, warning = FALSE}
 changes_by_zip <- heroin_zip%>%
   # Going to add 1 to all values to work around Inf values
   mutate(value = value + 1)%>%
@@ -629,7 +629,7 @@ counts downtown are *not* merely high because they have a higher population dens
 normalized map, but there was so little difference that it didn't seem to warrant the space.
 
 
-```{r normalized_heroin_use, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE, eval = FALSE, out.width = "100%"}
+```{r normalized_heroin_use, echo = FALSE, message = FALSE, cache = FALSE, warning = FALSE, eval = FALSE, out.width = "100%"}
 # Not actually going to use this either. The differences over the 
 # unnormalized plot don't seem to justify taking up the space
 heroin_map_normalized_0716 <- heroin_map_df%>%
@@ -728,7 +728,7 @@ extendLegendWithExtremes(q, "heroin_map_normalized_0716")
 
 ```
 
-```{r overdose_map, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE, eval = FALSE}
+```{r overdose_map, echo = FALSE, message = FALSE, cache = FALSE, warning = FALSE, eval = FALSE}
 # Don't think this ended up being super illustrative, so I'm not including it in the report
 # Keeping here for future reference
 
