@@ -1,0 +1,870 @@
+---
+title: Louisville's Heroin Epidemic
+author: Adam
+date: '2017-08-18'
+slug: louisville-s-heroin-epidemic
+categories:
+  - Crime
+  - City Development
+  - Drugs
+tags:
+  - Visualization
+  - R
+  - Mapping
+  - Crime
+---
+
+If you have been paying any attention to the news recently, you will have heard
+that the United States is experiencing a resurgance of heroin use.  Unfortunately, 
+Louisville is smack in the middle of this growing epidemic. Locally, I think the perception
+is that one, this problem sprung up overnight with no warning and two, even if heroin use *is* a problem, it isn't
+a problem near *me*.  But is there truth to either of these beliefs?  
+
+Being the data geek that I am, these questions piqued my curiosity. So instead of just accepting these reports as fact,
+I decided to see just how much of a problem heroin actually is in our region.  Using heroin crime data 
+(namely possession and trafficking) from Louisville's open crime dataset as a proxy for use, I decided to 
+visualize Louisville's heroin problem to see if I could gain any insight.  Is there truly a heroin epidemic? 
+How fast did this become a problem? And probably most important to the average person, is this actually happening near me? 
+Sadly, the answers appear to be 'Yes', 'Quickly', and 'Absolutely'. 
+
+```{r package_load, cache = TRUE, echo = FALSE, message=FALSE, warning = FALSE}
+#Loading all packages necessary for report
+library(stringi)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(viridis)
+library(gridExtra)
+library(tidyr)
+library(rgeos)
+library(rgdal)
+library(raster)
+library(broom)
+library(gtable)
+library(grid)
+```
+
+### Overview of Various Drug Offenses
+
+
+```{r, load_data_and_base_filter, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# Original dataset is found here (http://portal.louisvilleky.gov/dataset/crimedataall-data)
+# Geocoding and intial cleaning/formatting process can be found at
+# https://github.com/Grollus/LouisvilleCrime/blob/master/louisville_raw_data_and_geocoding.R
+
+
+# Since most data cleaning was done outside this report, all I have to do here is
+# create any useful additional variables and load the file
+raw_data <- read_rds("lou_crime_geocoded_df.rds.gzip")
+
+create_date_variables <- function(df){
+  require(lubridate)
+  # Uses the POSIXct date_occured variable to create useful date related
+  # subvariables
+  df$year <- year(df$date_occured)
+  df$month <- month(df$date_occured)
+  df$day <- day(df$date_occured)
+  df$hour <- hour(df$date_occured)
+  df$year_month <- paste(df$year, df$month, sep = '-')
+  df$day_of_week <- wday(df$date_occured, label = TRUE, abbr = FALSE)
+  df$weekday <- ifelse(df$day_of_week == "Saturday" | df$day_of_week == "Sunday", 
+                              "Weekend", "Weekday")
+  df$yday <- yday(df$date_occured)
+  
+  return(df)
+}
+
+crime_lou <- create_date_variables(raw_data)
+# Filter out records with no lat/lng coords and those from desired time period
+crime_lou <- crime_lou%>%
+  filter(year <=2016 & year >=2005 & !is.na(lat)  & !is.na(lng))
+```
+
+
+```{r, theme_and_drug_filter, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+# Base theme for all bar charts
+bar.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+
+########################################################################################################
+# Going to regex out all of the drug offenses I'm interested in. Then I can use this for easy faceting
+# and just analysis in general. I create a new variable named 'drug' that just identifies the 
+# associated drug with that crime entry.
+
+drug_offenses <- crime_lou%>%
+  filter(stri_detect_regex(uor_desc, "heroin|opiate|cocaine|marijuana|meth|codeine|lsd|barbituate|pcp|
+                           hallucinogen"))%>%
+  mutate(drug = ifelse(stri_detect_regex(uor_desc, "heroin") == TRUE, "Heroin", 
+                       ifelse(stri_detect_regex(uor_desc, "opiate|codeine") == TRUE, 'Opiates', 
+                              ifelse(stri_detect_regex(uor_desc, "meth") == TRUE, "Methamphetamine",
+                                     ifelse(stri_detect_regex(uor_desc, "cocaine") == TRUE, "Cocaine",
+                                            ifelse(stri_detect_regex(uor_desc, "marijuana") == TRUE, "Marijuana", "Other"))))))
+
+
+# take input drug and two years; returns a df with the count of offenses
+# for input drug for those years
+delta_between_two_years <- function(which_drug, y1, y2){
+  drug_offenses%>%
+    filter(drug == which_drug, year == y1|year == y2)%>%
+    group_by(year)%>%
+    summarise(count = n())
+}
+
+
+per_change_heroin <- delta_between_two_years("Heroin", 2007, 2016)
+per_change_meth <- delta_between_two_years("Methamphetamine", 2007, 2016)
+per_change_opiates <- delta_between_two_years("Opiates", 2007, 2016)
+per_change_cocaine <- delta_between_two_years("Cocaine", 2007, 2016)
+per_change_marijuana <- delta_between_two_years("Marijuana", 2007, 2016)
+
+```
+
+To get a sense of the general drug 'scene' in Louisville I want to look at the number
+of offenses of the major drugs over the past decade.  I can't really tell if heroin is a problem if
+I have no idea of the general level of drug use in our city.  
+
+Using some simple bar plots, the huge increase in heroin offenses is immediately obvious. We have seen 
+a staggering *`r round(per_change_heroin$count[2]/per_change_heroin$count[1]* 100, 0)`%* increase in heroin 
+offenses from 2007 to 2016.  While it is true we have seen an increase in methamphetamine and opiate offenses--by 
+*`r round(per_change_meth$count[2]/per_change_meth$count[1]* 100, 0)`%* and 
+*`r round(per_change_opiates$count[2]/per_change_opiates$count[1]* 100, 0)`%* respectively--
+it is not to nearly the same degree. Heroin's offenses have increased over 3 times as fast as
+those of meth and other opiates, even though we are seeing large increases in crime related
+to those drugs too!
+
+
+```{r, increasing_drugs_bar_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "90%"}
+drug_offenses %>%
+  filter(year >= 2007, drug != "Marijuana" & drug != "Cocaine" & drug != "Other")%>%
+  group_by(year, drug)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  geom_bar(stat = 'identity', fill = "#0072B2", alpha = .5, color = 'black')+
+  facet_wrap(~drug)+
+  stat_smooth(method = 'auto', size = .45, alpha = .2, fill = 'grey', colour = 'red2', level = .95)+
+  ggtitle("Heroin, Meth, and Opiate Offenses, 2007-2016")+
+  labs(x = "Year", y = "Offenses")+
+  scale_x_discrete(limits = seq(2007, 2016, by = 1))+
+  bar.theme+
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    strip.background = element_rect(fill = 'white'),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 0, vjust = .5, size = 5)
+)
+
+```
+
+
+When I first saw this--after the initial shock--I figured drug use in general over the past
+decade must just be up.  A rising tide lifts all boats so to speak.  However, when you plot
+out the other major recreational drugs, you don't see this.  We have seen fairly sizeable decreases in criminal activity relating
+to cocaine and marijuana(*-`r round(per_change_cocaine$count[2]/per_change_cocaine$count[1]* 100, 0)`%* and 
+*-`r round(per_change_marijuana$count[2]/per_change_marijuana$count[1]* 100, 0)`%* respectively)
+over the same period of time.  
+
+```{r, decreasing_drugs_bar_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "90%"}
+drug_offenses %>%
+  filter(year >= 2007, drug == "Marijuana"| drug == "Cocaine")%>%
+  group_by(year, drug)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  geom_bar(stat = 'identity', fill = "#0072B2", alpha = .5, color = 'black')+
+  facet_wrap(~drug)+
+  stat_smooth(method = 'auto', size = .45, alpha = .2, fill = 'grey', colour = 'red2', level = .95)+
+  ggtitle("Cocaine and Marijuana Offenses, 2007-2016")+
+  labs(x = "Year", y = "Offenses")+
+  scale_x_discrete(limits = seq(2007, 2016, by = 1))+
+  bar.theme+
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    strip.background = element_rect(fill = 'white'),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 0, vjust = .5, size = 7)
+)
+
+```
+
+
+In fact, if we look at a plot of all recreational drug offenses, we see a slight trend 
+downward over the past decade.
+
+```{r,all_rec_drug_offenses, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "90%"}
+drug_offenses %>%
+  filter(year >= 2007)%>%
+  group_by(year)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  geom_bar(stat = 'identity', fill = "#0072B2", alpha = .5, color = 'black')+
+  stat_smooth(method = 'lm', size = .45, alpha = .2, fill = 'grey', colour = 'red2', level = .95)+
+  ggtitle("All Recreational Drug Offenses, 2007-2016")+
+  labs(x = "Year", y = "Offenses")+
+  scale_x_discrete(limits = seq(2007, 2016, by = 1))+
+  bar.theme+
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    strip.background = element_rect(fill = 'white'),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 0, vjust = .5, size = 7)
+)
+
+```
+
+```{r diff_mari_heroin, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+times_more_mary_v_heroin <- drug_offenses%>%
+  filter(drug == 'Heroin'|drug == 'Marijuana', year == 2016)%>%
+  group_by(drug)%>%
+  summarise(count = n())
+```
+
+A couple important points probably should be noted here. First, if you look at the scale of 
+the y-axis on all the previous plots, you will notice that marijuana offenses dominate the overall
+count. If you plot heroin and marijuana offenses on the same scale, heroin use still appears miniscule.
+As of 2016 we still had `r round(times_more_mary_v_heroin$count[2]/times_more_mary_v_heroin$count[1], 1)`
+times more marijuana offenses than heroin offenses.
+
+
+```{r, marijuana_v_heroin_bar, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width="90%"}
+drug_offenses %>%
+  filter(year >= 2007, drug == "Marijuana"|drug == "Heroin")%>%
+  group_by(year, drug)%>%
+  summarise(count = n())%>%
+  ggplot(aes(x = year, y = count))+
+  facet_wrap(~drug)+
+  geom_bar(stat = 'identity', fill = "#0072B2", alpha = .5, color = 'black')+
+  # stat_smooth(method = 'auto', size = .45, alpha = .2, fill = 'grey', colour = 'red2', level = .95)+
+  ggtitle("Heroin v Marijuana Offenses, 2007-2016")+
+  labs(x = "Year", y = "Offenses")+
+  scale_x_discrete(limits = seq(2007, 2016, by = 1))+
+  bar.theme+
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    strip.background = element_rect(fill = 'white'),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 0, vjust = .5, size = 7)
+)
+
+```
+
+This is not to say that heroin use is small and inconsequential.  What this means is that marijuana 
+offenses have the power to move(and very possibly distort) the entire drug picture by itself.  As can often be the case, taking 
+a very aggregated view of the data would lead you to a completely incorrect conclusion.
+
+Secondly, we need to keep in mind that none of this is happening in a vacuum. There are very real social, 
+political, and economic changes that happen which *do* end up altering the landscape.  Unfortunately,
+these changes can make it very difficult to pin down exactly what is happening. For instance, when Obama
+first took office in 2008, he voiced a softer federal stance on prosecuting marijuana crimes.  So
+while marijuana was--and still *is*--illegal in all forms in Kentucky, did this federal statement
+affect the enforcement and prosecution of marijuana offenses in Louisville? It is way too complicated of an issue 
+to answer simply yes or no, but I think it would be naive to think it had *zero* effect.  But we can't be sure
+(at least with this simplistic analysis) that there wasn't simply a coincidental decline in marijuana use, which also resulted in fewer
+marijuana crimes.  This same sort of logic applies to offenses of all types.
+
+In that vein, we have to at least mention the changes in the opiate drug landscape that could explain 
+some of this heroin epidemic.  Back in 2010 and 2011, two of the major opiates abused recreationally
+were [reformulated](https://odcp.ky.gov/Pages/The-Heroin-Epidemic.aspx) to make recreational use
+more difficult. Around the same time, various systems(for instance KASPER) were put in place to make abusing
+prescription opiates more difficult. Though it is always difficult to establish causation, it seems
+very likely that effectively restricting the supply of prescription opiates around 2011 triggered
+a surge in heroin demand as a replacement.  
+
+
+
+
+```{r, overdose_heroin_correlation, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE}
+overdose <- crime_lou%>%
+  filter(uor_desc == 'overdose'|stri_detect_regex(uor_desc, "heroin"))%>%
+  mutate(Category = ifelse(stri_detect_regex(uor_desc, 'heroin') == TRUE, "Offenses", "Overdoses"))%>%
+  group_by(year, Category)%>%
+  summarise(count = n())
+
+methoverdose <- crime_lou%>%
+  filter(uor_desc == 'overdose'|stri_detect_regex(uor_desc, "meth"))%>%
+  mutate(Category = ifelse(stri_detect_regex(uor_desc, 'meth') == TRUE, "Offenses", "Overdoses"))%>%
+  group_by(year, Category)%>%
+  summarise(count = n())
+
+methcor_df <- methoverdose %>%
+  spread(key = year, value = count)%>%
+  gather(year, count, -Category)
+methcor_df$count <- ifelse(is.na(methcor_df$count) == TRUE, 0, methcor_df$count)
+
+methover <- filter(methcor_df, Category == "Overdoses")
+methoff <- filter(methcor_df, Category == "Offenses")
+meth_overdose_cor <- cor(methover$count, methoff$count)
+
+cor_df <- overdose %>%
+  spread(key = year, value = count)%>%
+  gather(year, count, -Category)
+cor_df$count <- ifelse(is.na(cor_df$count) == TRUE, 0, cor_df$count)
+
+over <- filter(cor_df, Category == "Overdoses")
+off <- filter(cor_df, Category == "Offenses")
+heroin_overdose_cor <- cor(over$count, off$count)
+```
+
+Regardless of what *caused* the surge in heroin use, the grim reality of the increase can been seen in the plot below. This plot shows the number
+of overdoses reported in the crime data. While overdoses aren't strictly a crime, they *are* reported 
+in the crime statistics.  I can't be sure that the overdoses are all heroin related(for instance, meth shows a correlation of `r round(meth_overdose_cor, 2)`), but a correlation of `r round(heroin_overdose_cor, 2)` between the heroin uptick and the overdoses is *extraordinarily* coincidental
+if they aren't related. 
+
+
+
+```{r overdose_bar_plot, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "90%"}
+overdose%>%
+  filter(year >= 2007)%>%
+  ggplot(aes(x = year, y = count))+
+  geom_bar(stat= 'identity', aes(fill = Category), alpha = 0.5, color = 'black', position = 'dodge')+
+  scale_fill_manual(values = c("#0072B2", "#D55E00"))+
+  ggtitle("Heroin Offenses and Overdoses, 2007-2016")+
+  labs(x = "Year", y = "Count", fill = "")+
+  scale_x_discrete(limits = seq(2007, 2016, by = 1))+
+  bar.theme+
+  theme(
+    legend.position = "bottom",
+    legend.key.size = unit(4, 'mm'),
+    legend.key.width = unit(4, 'mm'),
+    legend.text = element_text(size = 8),
+    legend.margin = unit(0, 'mm'),
+    plot.title = element_text(hjust = 0.5),
+    strip.background = element_rect(fill = 'white'),
+    axis.title.x = element_text(hjust = 0.5),
+    axis.title.y = element_text(hjust = 0.5),
+    axis.text.x = element_text(angle = 0, vjust = .5, size = 7)
+)
+```
+
+This explosion of overdoses since 2012 really drives home the true human cost of the heroin
+epidemic.  I think it is crucial to remember that these are real people with real lives
+who are being ravaged by addiction and, ultimately, death.
+
+
+### Mapping the Epidemic
+
+After this sobering dose of reality, I want to see exactly where this is happening within our city.
+In this day and age, we hear news of heroin crimes and overdoes almost nightly on the news, but despite this, I think many people
+still assume this is something that only happens in "bad" neighborhoods with bad people. This distancing thought makes it easy to put
+an unpleasant piece of information out of our immediate focus.  But doing that doesn't change the reality--
+heroin use is all around us today.
+
+The first thing I wanted to do when I decided to look into heroin use was
+map out the data in some way.  Luckily, R has some brilliant mapping tools that 
+allow me to do just that. The finest-grained geographic area I could sub-divide the data into
+turned out to be zip codes, but this works perfectly for a type of plot typically 
+known as a choropleth plot.  
+
+Using a shapefile from [this](http://data.lojic.org/datasets/jefferson-county-ky-zip-codes) website, I
+grabbed the zip code boundaries for the city of Louisville and after some cleaning, aggregation, and a *ton*
+of formatting(huge thanks to [Timo Grossenbacher](https://timogrossenbacher.ch/2016/12/beautiful-thematic-maps-with-ggplot2-only/)
+and his brilliant post on formatting clean choropleth plots)
+we can easily see the spread of heroin use through the city.
+
+```{r heroin_choropleth_multiples, echo = FALSE, cache = TRUE, warning = FALSE, message = FALSE, out.width = "90%"}
+#load zip population data for normalized plot
+# editting value for 40118 manually with data from 
+# https://factfinder.census.gov/faces/nav/jsf/pages/community_facts.xhtml
+
+load("lou_zip_pop.Rda")
+
+extra_zip <- data.frame("40118", 9724)
+names(extra_zip) <- c("zip_code", "population")
+pop_df <- rbind(pop_df, extra_zip)
+# Putting a dummy value in for zip codes with pop == 0.
+# These are mainly PO boxes, so there is technically no population
+# But, rarely, these can have offenses tied to them. To avoid
+# Inf errors, I assign any 0 pop zip code a high value, which
+# drives down the normalized score for that zip code.
+# Not sure if this is the best way to handle it
+pop_df$population <- ifelse(pop_df$population == 0, 100000, pop_df$population)
+
+# Heroin based filtering and tidying
+heroin_offenses <- crime_lou%>%
+  filter(stri_detect_regex(uor_desc, "heroin"))
+
+
+heroin_zip <- heroin_offenses%>%
+  group_by(zip_code, year)%>%
+  summarise(value = n())%>%
+  rename(region = zip_code)%>%
+  spread(key = year, value = value)%>%
+  gather(year, value, -region)
+
+#Dealing with NA values
+heroin_zip$value <- ifelse(is.na(heroin_zip$value) == TRUE, 0, heroin_zip$value)
+
+
+# Join population data to main df
+heroin_zip <- left_join(heroin_zip, pop_df, by = c('region' = 'zip_code'))
+heroin_zip$population <- ifelse(is.na(heroin_zip$population) == TRUE, 0, heroin_zip$population)
+
+# Creating map object
+map <- readOGR("Jefferson_County_KY_ZIP_Codes.shp", verbose = FALSE)
+
+map@data$id <- rownames(map@data)
+map_df <- tidy(map, region = 'id')
+map_df <- left_join(map_df, map@data, by = 'id')
+
+# Joining map data to crime data
+heroin_map_df <- full_join(map_df, heroin_zip, by= c('ZIPCODE' = 'region'))
+
+# Adding normalized(use per 10000) use data to df
+heroin_map_df <- heroin_map_df%>%
+  mutate(normalized = (value/population) * 10000)
+heroin_map_df$normalized <- ifelse(is.nan(heroin_map_df$normalized) == TRUE, 0, heroin_map_df$normalized)
+
+# Base map theme
+theme_map <- function(...) {
+  theme_minimal() +
+    theme(
+      text = element_text(family = "Ubuntu Regular", color = "#22211d"),
+      axis.line = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      # panel.grid.minor = element_line(color = "#ebebe5", size = 0.2),
+      panel.grid.major = element_line(color = "#ebebe5", size = 0.2),
+      panel.grid.minor = element_blank(),
+      plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+      panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+      legend.background = element_rect(fill = "#f5f5f2", color = NA),
+      panel.border = element_blank(),
+      ...
+    )
+}
+
+
+heroin_map_0716 <- heroin_map_df%>%
+  filter(year >= 2007)
+
+no_classes <- 6
+labels <- c()
+
+quantiles <- quantile(heroin_map_0716$value, 
+                      probs = seq(0, 1, length.out = no_classes + 1))
+# Discrete breaks
+discrete_breaks <- c(0.5,1, 4, 14, 43)
+minVal <- min(heroin_map_0716$value, na.rm = T)  
+maxVal <- max(heroin_map_0716$value, na.rm = T)
+
+#form labels
+labels <- c()
+brks <- c(minVal, discrete_breaks, maxVal)
+
+for(idx in 1:length(brks)){
+  labels <- c(labels,round(brks[idx + 1], 2))
+}
+
+labels <- labels[1:length(labels)-1]
+# new variable in dataset based on these
+heroin_map_0716$brks <- cut(heroin_map_0716$value,
+                               breaks = brks,
+                               include.lowest = TRUE,
+                               labels = labels)
+brks_scale <- levels(heroin_map_0716$brks)
+labels_scale <- rev(brks_scale)
+
+extendLegendWithExtremes <- function(p, data){
+  p_grob <- ggplotGrob(p)
+  legend <- gtable_filter(p_grob, "guide-box")
+  legend_grobs <- legend$grobs[[1]]$grobs[[1]]
+  # grab the first key of legend
+  legend_first_key <- gtable_filter(legend_grobs, "key-3-1-1")
+  legend_first_key$widths <- unit(2, units = "cm")
+  # modify its width and x properties to make it longer
+  legend_first_key$grobs[[1]]$width <- unit(2, units = "cm")
+  legend_first_key$grobs[[1]]$x <- unit(0.15, units = "cm")
+  
+  # last key of legend
+  legend_last_key <- gtable_filter(legend_grobs, "key-3-6-1")
+  legend_last_key$widths <- unit(2, units = "cm")
+  # analogous
+  legend_last_key$grobs[[1]]$width <- unit(2, units = "cm")
+  legend_last_key$grobs[[1]]$x <- unit(1.02, units = "cm")
+  
+  # grab the last label so we can also shift its position
+  legend_last_label <- gtable_filter(legend_grobs, "label-5-6")
+  legend_last_label$grobs[[1]]$x <- unit(2, units = "cm")
+  
+  # Insert new color legend back into the combined legend
+  legend_grobs$grobs[legend_grobs$layout$name == "key-3-1-1"][[1]] <- 
+    legend_first_key$grobs[[1]]
+  legend_grobs$grobs[legend_grobs$layout$name == "key-3-6-1"][[1]] <- 
+    legend_last_key$grobs[[1]]
+  legend_grobs$grobs[legend_grobs$layout$name == "label-5-6"][[1]] <- 
+    legend_last_label$grobs[[1]]
+  
+  # finally, I need to create a new label for the minimum value 
+  new_first_label <- legend_last_label$grobs[[1]]
+  # have to create the variable from the input crime data, then parse it, then eval it
+  new_first_label$label <- round(min(eval(parse(text = paste0(data, "$", "value"))), na.rm = T), 2)
+  new_first_label$x <- unit(-0.15, units = "cm")
+  new_first_label$hjust <- 1
+  
+  legend_grobs <- gtable_add_grob(legend_grobs, 
+                                  new_first_label, 
+                                  t = 6, 
+                                  l = 2, 
+                                  name = "label-5-0", 
+                                  clip = "off")
+  legend$grobs[[1]]$grobs[1][[1]] <- legend_grobs
+  p_grob$grobs[p_grob$layout$name == "guide-box"][[1]] <- legend
+  
+  # the plot is now drawn using this grid function
+  grid::grid.newpage()
+  grid::grid.draw(p_grob)
+}
+
+
+q <- ggplot()+
+  geom_polygon(data = heroin_map_0716, aes(fill = brks,
+                                              x = long, 
+                                              y = lat, 
+                                              group = group))+
+  geom_path(data = heroin_map_0716, aes(x = long,
+                                           y = lat, 
+                                           group = group),
+            color = 'white', size = 0.1)+
+  facet_wrap(~year,
+             nrow = 3)+
+  coord_equal()+
+  theme_map()+
+  theme(
+    legend.background = element_rect(fill = alpha('white', 0.0)),
+    legend.text = element_text(size = 7, hjust = 0, color = "#4e4d47"),
+    plot.title = element_text(hjust = 0.5, color = "#4e4d47"),
+    plot.subtitle = element_text(hjust = 0.5, color = "#4e4d47", 
+                                 margin = margin(b = -0.1, 
+                                                 t = -0.1, 
+                                                 l = 2, 
+                                                 unit = "cm"), 
+                                 debug = F),
+    legend.title = element_text(size = 8),
+    plot.margin = unit(c(.5,.5,.2,.5), "cm"),
+    # panel.spacing = unit(c(-.1,0.2,.2,0.2), "cm"),
+    panel.border = element_blank(),
+    plot.caption = element_text(size = 6,
+                                hjust = 0.92,
+                                margin = margin(t = 0.2,
+                                                b = 0,
+                                                unit = "cm"),
+                                color = "#939184")
+  )+
+  theme(legend.position = 'bottom')+
+  labs(title = "Louisville's Heroin Epidemic",
+       subtitle = "Heroin Offenses by Zip Code, 2007-2016")+
+  scale_fill_manual(
+    # magma with 8 classes
+    values = rev(magma(8, alpha = 0.7)[2:7]),
+    breaks = rev(brks_scale),
+    name = "Heroin Offenses",
+    drop = FALSE,
+    labels = labels_scale,
+    guide = guide_legend(
+      direction = 'horizontal',
+      keyheight = unit(2, units = 'mm'),
+      keywidth = unit(70/length(labels), units = 'mm'),
+      title.position = 'top',
+      title.hjust = 0.5,
+      label.hjust = 1,
+      nrow = 1,
+      byrow = TRUE,
+      reverse = TRUE,
+      label.position = 'bottom'
+    )
+  )
+
+extendLegendWithExtremes(q, "heroin_map_0716")
+
+```
+
+```{r greater_than, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE}
+greater_than <- heroin_zip%>%
+  filter(year == 2016)%>%
+  mutate(greater_than = ifelse(value >=26, TRUE, FALSE))
+
+```
+
+The quick saturation of the city is pretty shocking. Even after seeing the sharp rise in 2012 in the plots earlier,
+the near immediate darkening of the west and south end in 2012 took me by surprise. In 2016, we had 11 zip codes
+that saw at least 1 heroin crime per week.  In 40203, they saw a heroin crime every `r round(365/143, 1)`
+days! 
+
+```{r biggest_change_zip_codes, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE}
+changes_by_zip <- heroin_zip%>%
+  # Going to add 1 to all values to work around Inf values
+  mutate(value = value + 1)%>%
+  dplyr::select(-population)%>%
+  filter(year == 2007|year == 2016)%>%
+  spread(key = year, value = value)%>%
+  mutate(per_change = `2016`/`2007` * 100)
+
+hurstbourne <- changes_by_zip%>%
+  filter(region == 40222)%>%
+  dplyr::select(per_change)
+```
+  
+But perhaps even more shocking is that even the 'better' parts of the city are being hit. The east end and regions like Prospect--
+typically thought of as very affluent parts of the city-- have seen huge increases as well. We see east end regions with 
+increases as high as *`r hurstbourne$per_change`%*. This is definitely not something that is only happening in one area of the city.
+An incredible `r round(sum(greater_than$greater_than)/nrow(greater_than)*100, 1)`% of Louisville zip codes
+are seeing at least 1 heroin crime every other week.  Keep in mind that this is heroin *crime* data--meaning that heroin
+*use* is likely to be significantly higher in all regions.  I shudder to think about the true number of overdoses
+or the number of families affected by the epidemic.
+
+It should be noted that none of this really changes when you normalize for population density.  The regions with high 
+counts downtown are *not* merely high because they have a higher population density. In fact, I was going to included a 
+normalized map, but there was so little difference that it didn't seem to warrant the space.
+
+
+```{r normalized_heroin_use, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE, eval = FALSE, out.width = "90%"}
+# Not actually going to use this either. The differences over the 
+# unnormalized plot don't seem to justify taking up the space
+heroin_map_normalized_0716 <- heroin_map_df%>%
+  filter(year >= 2007)
+
+no_classes <- 6
+labels <- c()
+
+quantiles <- quantile(heroin_map_normalized_0716$normalized, 
+                      probs = seq(0, 1, length.out = no_classes + 1))
+# Discrete breaks
+discrete_breaks <- c(0.5, 1, 2, 7, 14)
+minVal <- min(heroin_map_normalized_0716$normalized, na.rm = T)  
+maxVal <- max(heroin_map_normalized_0716$normalized, na.rm = T)
+
+#form labels
+labels <- c()
+brks <- c(minVal, discrete_breaks, maxVal)
+
+for(idx in 1:length(brks)){
+  labels <- c(labels,round(brks[idx + 1], 2))
+}
+
+labels <- labels[1:length(labels)-1]
+# new variable in dataset based on these
+heroin_map_normalized_0716$brks <- cut(heroin_map_normalized_0716$normalized,
+                               breaks = brks,
+                               include.lowest = TRUE,
+                               labels = labels)
+brks_scale <- levels(heroin_map_normalized_0716$brks)
+labels_scale <- rev(brks_scale)
+
+
+
+
+q <- ggplot()+
+  geom_polygon(data = heroin_map_normalized_0716, aes(fill = brks,
+                                              x = long, 
+                                              y = lat, 
+                                              group = group))+
+  geom_path(data = heroin_map_normalized_0716, aes(x = long,
+                                           y = lat, 
+                                           group = group),
+            color = 'white', size = 0.1)+
+  facet_wrap(~year,
+             nrow = 3)+
+  coord_equal()+
+  theme_map()+
+  theme(
+    legend.background = element_rect(fill = alpha('white', 0.0)),
+    legend.text = element_text(size = 7, hjust = 0, color = "#4e4d47"),
+    plot.title = element_text(hjust = 0.5, color = "#4e4d47"),
+    plot.subtitle = element_text(hjust = 0.5, color = "#4e4d47", 
+                                 margin = margin(b = -0.1, 
+                                                 t = -0.1, 
+                                                 l = 2, 
+                                                 unit = "cm"), 
+                                 debug = F),
+    legend.title = element_text(size = 8),
+    plot.margin = unit(c(.5,.5,.2,.5), "cm"),
+    # panel.spacing = unit(c(-.1,0.2,.2,0.2), "cm"),
+    panel.border = element_blank(),
+    plot.caption = element_text(size = 6,
+                                hjust = 0.92,
+                                margin = margin(t = 0.2,
+                                                b = 0,
+                                                unit = "cm"),
+                                color = "#939184")
+  )+
+  theme(legend.position = 'bottom')+
+  labs(title = "Louisville's Heroin Epidemic",
+       subtitle = "Normalized Heroin Offenses by Zip Code, 2007-2016")+
+  scale_fill_manual(
+    # magma with 8 classes
+    values = rev(magma(8, alpha = 0.7)[2:7]),
+    breaks = rev(brks_scale),
+    name = "Heroin Offenses",
+    drop = FALSE,
+    labels = labels_scale,
+    guide = guide_legend(
+      direction = 'horizontal',
+      keyheight = unit(2, units = 'mm'),
+      keywidth = unit(70/length(labels), units = 'mm'),
+      title.position = 'top',
+      title.hjust = 0.5,
+      label.hjust = 1,
+      nrow = 1,
+      byrow = TRUE,
+      reverse = TRUE,
+      label.position = 'bottom'
+    )
+  )
+
+extendLegendWithExtremes(q, "heroin_map_normalized_0716")
+
+
+```
+
+```{r overdose_map, echo = FALSE, message = FALSE, cache = TRUE, warning = FALSE, eval = FALSE}
+# Don't think this ended up being super illustrative, so I'm not including it in the report
+# Keeping here for future reference
+
+# Overdose filtering
+overdose_df <- crime_lou%>%
+  filter(stri_detect_regex(uor_desc, "overdose"))
+
+
+overdose_zip <- overdose_df%>%
+  group_by(zip_code, year)%>%
+  summarise(value = n())%>%
+  rename(region = zip_code)%>%
+  spread(key = year, value = value)%>%
+  gather(year, value, -region)
+
+#Dealing with NA values
+overdose_zip$value <- ifelse(is.na(overdose_zip$value) == TRUE, 0, overdose_zip$value)
+
+
+# Join population data to main df
+overdose_zip <- left_join(overdose_zip, pop_df, by = c('region' = 'zip_code'))
+overdose_zip$population <- ifelse(is.na(overdose_zip$population) == TRUE, 0, overdose_zip$population)
+
+# Creating map object
+map <- readOGR("Jefferson_County_KY_ZIP_Codes.shp", verbose = FALSE)
+
+map@data$id <- rownames(map@data)
+map_df <- tidy(map, region = 'id')
+map_df <- left_join(map_df, map@data, by = 'id')
+
+# Joining map data to crime data
+overdose_map_df <- full_join(map_df, overdose_zip, by= c('ZIPCODE' = 'region'))
+
+# Adding normalized(use per 10000) use data to df
+overdose_map_df <- overdose_map_df%>%
+  mutate(normalized = (value/population) * 10000)
+overdose_map_df$normalized <- ifelse(is.nan(overdose_map_df$normalized) == TRUE, 0, overdose_map_df$normalized)
+
+overdose_map_normalized_0716 <- overdose_map_df%>%
+  filter(year >= 2007)
+
+no_classes <- 6
+labels <- c()
+
+quantiles <- quantile(overdose_map_normalized_0716$normalized, 
+                      probs = seq(0, 1, length.out = no_classes + 1))
+# Discrete breaks
+discrete_breaks <- c(0.5, 1, 2, 3, 4)
+minVal <- min(overdose_map_normalized_0716$normalized, na.rm = T)  
+maxVal <- max(overdose_map_normalized_0716$normalized, na.rm = T)
+
+#form labels
+labels <- c()
+brks <- c(minVal, discrete_breaks, maxVal)
+
+for(idx in 1:length(brks)){
+  labels <- c(labels,round(brks[idx + 1], 2))
+}
+
+labels <- labels[1:length(labels)-1]
+# new variable in dataset based on these
+overdose_map_normalized_0716$brks <- cut(overdose_map_normalized_0716$normalized,
+                               breaks = brks,
+                               include.lowest = TRUE,
+                               labels = labels)
+brks_scale <- levels(overdose_map_normalized_0716$brks)
+labels_scale <- rev(brks_scale)
+
+
+q <- ggplot()+
+  geom_polygon(data = overdose_map_normalized_0716, aes(fill = brks,
+                                              x = long, 
+                                              y = lat, 
+                                              group = group))+
+  geom_path(data = overdose_map_normalized_0716, aes(x = long,
+                                           y = lat, 
+                                           group = group),
+            color = 'white', size = 0.1)+
+  facet_wrap(~year,
+             nrow = 3)+
+  coord_equal()+
+  theme_map()+
+  theme(
+    legend.background = element_rect(fill = alpha('white', 0.0)),
+    legend.text = element_text(size = 7, hjust = 0, color = "#4e4d47"),
+    plot.title = element_text(hjust = 0.5, color = "#4e4d47"),
+    plot.subtitle = element_text(hjust = 0.5, color = "#4e4d47", 
+                                 margin = margin(b = -0.1, 
+                                                 t = -0.1, 
+                                                 l = 2, 
+                                                 unit = "cm"), 
+                                 debug = F),
+    legend.title = element_text(size = 8),
+    plot.margin = unit(c(.5,.5,.2,.5), "cm"),
+    # panel.spacing = unit(c(-.1,0.2,.2,0.2), "cm"),
+    panel.border = element_blank(),
+    plot.caption = element_text(size = 6,
+                                hjust = 0.92,
+                                margin = margin(t = 0.2,
+                                                b = 0,
+                                                unit = "cm"),
+                                color = "#939184")
+  )+
+  theme(legend.position = 'bottom')+
+  labs(title = "Louisville's overdose Epidemic",
+       subtitle = "Normalized overdose Offenses by Zip Code, 2007-2016")+
+  scale_fill_manual(
+    # magma with 8 classes
+    values = rev(magma(8, alpha = 0.7)[2:7]),
+    breaks = rev(brks_scale),
+    name = "overdose Offenses",
+    drop = FALSE,
+    labels = labels_scale,
+    guide = guide_legend(
+      direction = 'horizontal',
+      keyheight = unit(2, units = 'mm'),
+      keywidth = unit(70/length(labels), units = 'mm'),
+      title.position = 'top',
+      title.hjust = 0.5,
+      label.hjust = 1,
+      nrow = 1,
+      byrow = TRUE,
+      reverse = TRUE,
+      label.position = 'bottom'
+    )
+  )
+
+extendLegendWithExtremes(q, "overdose_map_normalized_0716")
+
+
+```
+
+### Conclusion
+So, sadly, it seems since around 2012 Louisville has been in the midst of a heroin epidemic. If you don't think it's happening near you,
+you are being blinded by wishful thinking.  Heroin crime--and one can then surmise heroin use-- is happening all around us.  While I don't
+proclaim to know the solution to such a complex, multifaceted problem, I *do* think the first step is to acknowledgement that
+this is an issue for everyone in our community.  The consequences of this epidemic--be it in lives taken, or families shattered,
+or property destroyed--are affecting people of all ages, races, genders and incomes.
+
+As usual, all code used in this report can be found [here](https://github.com/Grollus/DataBlog/tree/master/content/post).
