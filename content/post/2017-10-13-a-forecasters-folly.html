@@ -1,0 +1,393 @@
+---
+title: A Forecasters Folly
+author: Adam
+date: '2017-10-13'
+slug: a-forecasters-folly
+categories:
+  - City Development
+  - Theft
+  - Forecasting
+  - Time Series
+tags:
+  - R
+  - Statistics
+  - Visualization
+  - Forecasting
+---
+
+
+
+<p>I’ve been itching to do a forecasting post for a while. Time series data is not something I work with often, so I have wanted to practice some basic techniques, but I’ve been lacking an inspiring dataset to work with. But recently I realized I have a perfectly fine dataset ready to go with my cleaned up crime data. With just a little bit of aggregation, I can turn this large ~1m+ row dataset into neatly organized time series counts. The only question is what specifically to examine. Since I have been tossing this idea around for a while, I knew I wanted a couple things for a dataset/problem:</p>
+<ul>
+<li><p>A good amount of data for every segment of the time series. In general, the more data the better.</p></li>
+<li><p>Must be moderately fine-grained time periods–something along the lines of weekly data would be ideal. I’d like to use this model in a crime prediction application eventually, and I think shorter forecasting horizens tend to be more engaging for that sort of thing. I do think forecasting longer term windows also have a lot of value, so ultimately I will have to see which option is more feasible.</p></li>
+</ul>
+<p>After some exploration, forecasting monthly theft counts seems to fit both criteria. I have a solid 10 year period of data and within those monthly periods there is enough data to generate robust predictions. While initially I wanted to use violent crime data, I found that–thankfully– Louisville doesn’t have enough violent crime to build a robust forecast with the methods I used here. The forecast variablity was just too high. Theft, however, <em>is</em> a big problem in the area, so forecasting is something that could provide tangible benefits.</p>
+<p>It should be noted that I strongly considered–and in fact <em>did</em> significant forecasting with weekly data, but I was unable to achieve satisfactory results. While my inexperience with forecasting and time series certainly didn’t help(I could definitely see the value in a whole post on how I failed at this weekly forecasting), during my research it became readily apparent how much more difficult forecasting becomes as you shorten the period. Hopefully in the future I’ll have a new post with some more accurate weekly forecasting.</p>
+<p>So with a problem now in hand, let’s get to forecasting.</p>
+<div id="preparing-the-dataset" class="section level2">
+<h2>Preparing the dataset</h2>
+<p>First things first, I need to load in some data. The 2007-2016 data is something I have already prepared and just need to load. For the 2017 data, I can use the same script I used on my old data. I source in that script and use the same data cleaning functions as before to tidy up the new data. It’s always a great feeling when you can reuse old work. If you are interested, you can find that script <a href="https://github.com/Grollus/LouisvilleCrime/blob/master/louisville_raw_data_and_geocoding.R">here</a>.</p>
+<pre class="r"><code># Source in the necessary functions from our geocoding script
+source(&#39;louisville_raw_data_and_geocoding.R&#39;)
+
+# Loading 2017 dataset and preparing it for use
+seventeen &lt;- data_import_and_clean(&#39;Crime_Data_2017_0.csv&#39;)
+
+# Doing the geocoding prep for consistency, even though I am not 
+# doing the geocoding on new addresses since I am not using
+# location information here.
+seventeen_raw &lt;- geocode_prep(seventeen)
+
+# Load pre2017 crime data
+raw_data &lt;- read_rds(&quot;lou_crime_geocoded_df.rds.gzip&quot;)
+
+# remove lat/lng from raw_data and then bind the two df together
+raw_data &lt;- raw_data%&gt;%
+  select(-lat, -lng)
+
+full_raw &lt;- bind_rows(raw_data, seventeen_raw)</code></pre>
+<p>With the data loaded, I want to add some time related variables that I think could be useful. It is quite possible that not all of these get used in a final model, but I want to play around with them and see. Specifically, I am adding variables for:</p>
+<ul>
+<li>Year_Month</li>
+<li>Week of the year</li>
+<li>Year_Week</li>
+<li>Season</li>
+<li>a new Date variable that is class Date</li>
+</ul>
+<pre class="r"><code># Creates a number of useful date variables from POSIXct object
+create_date_variables &lt;- function(df){
+  require(lubridate)
+  # Uses the POSIXct date_occured variable to create subvariables
+  df$year_month &lt;- paste(df$year, df$month, sep = &#39;-&#39;)
+  df$date &lt;- as.Date(df$date_occured)
+  df$week &lt;- week(df$date_occured)
+  df$year_week &lt;- paste(df$year, df$week, sep = &#39;-&#39;)
+  
+  return(df)
+}
+
+#create season variable based on 2016 season dates
+getSeason &lt;- function(dates){
+  winter &lt;- as.Date(&quot;2016-12-21&quot;, format = &quot;%Y-%m-%d&quot;)
+  spring &lt;- as.Date(&quot;2016-3-20&quot;, format = &quot;%Y-%m-%d&quot;)
+  summer &lt;- as.Date(&quot;2016-6-21&quot;, format = &quot;%Y-%m-%d&quot;)
+  fall &lt;- as.Date(&quot;2016-9-22&quot;, format = &quot;%Y-%m-%d&quot;)
+  
+  d &lt;- as.Date(strftime(dates, format = &quot;2016-%m-%d&quot;))
+  
+  ifelse(d &gt;= winter | d &lt; spring, &quot;Winter&quot;,
+         ifelse(d &gt;= spring &amp; d &lt; summer, &quot;Spring&quot;,
+                ifelse(d &gt;= summer &amp; d &lt; fall, &quot;Summer&quot;, &quot;Fall&quot;)))
+}
+
+crime_lou &lt;- create_date_variables(full_raw)
+crime_lou$season &lt;- getSeason(crime_lou$date)</code></pre>
+<p>Now, after removing records with incorrect/non-Louisville zipcodes, removing pre-2007 records and trimming the data so I end with a full month, I can aggregate our data and transform it into a time series.</p>
+<pre class="r"><code># Aggregate function
+# Takes in 
+    # 1) crime : nibrs_code used for filtering
+    # 2) ... : any number of variables to be used for grouping(year, week, month, etc)
+summarise_data &lt;- function(df, crime , ...){
+  filter_by &lt;- enquo(crime)
+  
+  group_by &lt;- quos(...)
+  
+  df%&gt;%
+    filter(!!filter_by)%&gt;%
+    group_by(!!!group_by)%&gt;%
+    summarise(count = n())
+}
+
+# Creating vector of nibrs theft codes for filtering
+theft_codes &lt;- c(paste0(&quot;23&quot;, letters[seq(from = 1, to = 8)]), &quot;240&quot;, &quot;280&quot;)
+
+# aggregating thefts by year and week
+thefts_yw &lt;- summarise_data(crime_lou, nibrs_code %in%theft_codes, year, month)
+
+# creating time series
+# going to split into training and testing set straight away
+theft_ts &lt;- ts(thefts_yw$count, frequency = 12, start = decimal_date(ymd(&#39;2007-01-01&#39;)))
+theft_train &lt;- window(theft_ts, start = decimal_date(ymd(&#39;2007-01-01&#39;)), end = decimal_date(ymd(&#39;2016-12-31&#39;)))
+theft_test &lt;- window(theft_ts, start = decimal_date(ymd(&#39;2017-01-01&#39;)))</code></pre>
+<p>After all this, I am left with the chaotic looking time series below. Just from a passing glance, it’s immediately obvious there is some sort of parabolic looking seasonal pattern within each year. Additionally, it appears that there is a slight upward trend to the data–especially seen in 2016.</p>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/basic_timeseries-1.png" alt="Fig.1" width="672" />
+<p class="caption">
+(#fig:basic_timeseries)Fig.1
+</p>
+</div>
+<p>When you break the data down by year, this ebb and flow pattern becomes a little more clear. The early, winter weeks tend to have relatively low theft numbers and then you see a gradual increase through the spring and summer. After a peak towards the end of summer, thefts gradually drop off through fall and the beginning of winter. The variance you see between the years must be a combination of other factors, but the basic seasonal pattern is consistent over the years and therefore should be informative in our models.</p>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/basic_yearly_plot-1.png" alt="Fig.2" width="672" />
+<p class="caption">
+(#fig:basic_yearly_plot)Fig.2
+</p>
+</div>
+</div>
+<div id="baseline-models" class="section level2">
+<h2>Baseline Models</h2>
+<p>As with any modeling, you need to have a baseline against which to compare your forecasts. In our case, this can be something as simple as predicting the same number of thefts in January of 2017 as there were in January of 2016–also known as a seasonal naive model. This is actually a fairly common strategy in police departments around the country when they are attempting to forecast crime for resource allocation. We hope that we can do much better than these naive models, but if we can’t, we know to go back to the drawing board.</p>
+<p>For the purposes of this exploration, we’ll prepare three naive models. The mean model simply predicts the mean number of thefts for every week in the forecast period. The seasonal naive method, as mentioned above, uses past values as its predictions. And finally, the drift method essentially draws a line from the first data point to the last and uses that lines slope to forecast the time period. For all models in this post, we will use the 2007-2016 data to train the models and then test them against the data from January 2017 - June 2017.</p>
+<pre class="r"><code># Train Baseline Models
+fit.mean &lt;- meanf(theft_train, h = 6, level = 0.95)
+fit.snaive &lt;- snaive(theft_train, h = 6, level = 0.95)
+fit.drift &lt;- rwf(theft_train, h = 6, level = 0.95, drift = TRUE)
+
+# Determine the accuracy of baseline models against my test set
+# I create acc_df to store all these accuracy metrics for easy presentation
+mean.acc &lt;- accuracy(fit.mean, theft_test)
+snaive.acc &lt;- accuracy(fit.snaive, theft_test)
+drift.acc &lt;- accuracy(fit.drift, theft_test)
+
+acc_df &lt;- data.frame(Model = c(&quot;Mean&quot;, &quot;Seasonal Naive&quot;, &quot;Drift&quot;),
+                     RMSE = c(mean.acc[2, 2], snaive.acc[2, 2], drift.acc[2, 2]),
+                     MAPE = c(mean.acc[2, 5], snaive.acc[2, 5], drift.acc[2, 5]))
+
+acc_df</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Model</th>
+<th align="right">RMSE</th>
+<th align="right">MAPE</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Mean</td>
+<td align="right">195.5178</td>
+<td align="right">7.980466</td>
+</tr>
+<tr class="even">
+<td align="left">Seasonal Naive</td>
+<td align="right">213.0270</td>
+<td align="right">9.342649</td>
+</tr>
+<tr class="odd">
+<td align="left">Drift</td>
+<td align="right">256.0432</td>
+<td align="right">10.600292</td>
+</tr>
+</tbody>
+</table>
+<p>As you can see, the mean model performs best, with a MAPE(Mean Absolute Percentage Error) of 8%. This will be the baseline error rate for our models to beat. As you’ll see, it’s not always easy to beat this metric.</p>
+</div>
+<div id="arima-model-and-friends" class="section level2">
+<h2>ARIMA Model and Friends</h2>
+<p>Now that I have a baseline level of performance for comparison, it’s time to generate some slightly more advanced models to see what sort of performance I can squeeze out of our data. This process ended up being quite labor intensive as I ended up generating several dozen models, most of which were not very good. When I started to examine why, it was pretty obvious. The 2017 data doesn’t follow the typical pattern of a large drop in February(partly due to the shortened month) followed by a sharp rise back to ‘normalcy’ in March. No matter how good the model, when the future takes an unexpected turn, performance is going to drop. Part of the challenge in forecasting is working through these changes in your data and figuring out if there were signs you could have observed that would have warned you of these changes.</p>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/2016_2017_comparison-1.png" alt="Fig.3" width="672" />
+<p class="caption">
+(#fig:2016_2017_comparison)Fig.3
+</p>
+</div>
+<div id="linear-model" class="section level3">
+<h3>Linear Model</h3>
+<p>With that said, the first model that had some success was a simple linear model with both seasonal and trend components. As you can see in both Fig.1 and Fig.2 above, there is a clear seasonal pattern. We rise through the summer months and fall towards winter. This is regular, so it <em>should</em> be a highly informative variable. In our model the seasonal component is basically a set of coefficients that designates what month it is. Since there are 12 months, you need 11 terms to represent to be able to specify all 12 months.</p>
+<p>The trend term is just the linear models calculation of the general upward or downward motion of the data. You can get a good visualization of both the seasonal and trend components by <a href="http://otexts.org/fpp2/classical-decomposition.html">decomposing</a> the time series.</p>
+<pre class="r"><code>plot(stl(theft_train, s.window = &#39;periodic&#39;))</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/decomposition_plot-1.png" alt="Fig.4" width="672" />
+<p class="caption">
+(#fig:decomposition_plot)Fig.4
+</p>
+</div>
+<p>Fig.4 shows us the original data and then breaks it down into the seasonal, trend and remainder components. I can clearly see both the monthly seasonal pattern and the general upward trend of the number of thefts. Of particular note are the grey bars on the right hand side. Basically, the smaller the bar, the more important the component in explaining the overall data. So in our case, the seasonal component seems to explain more of the variation than the trend component. It should also be noted that the remainder portion (variation in the data that is not explained by the seasonal or trend components) does not appear to be randomly distributed. In fact, if I squint a bit, it almost looks like a sine wave. If this model captured all the available information, I would see randomly distributed remainders. Since this isn’t the case, it is highly likely that there is useful information left that the model is not capturing.</p>
+<p>Now the actual fitting of our linear model is quite simple with the forecast package. I simply specify that I want both season and trend components in the model formula. When I plot the resulting fit, I can see that while not perfect, the result seems decent. The general shape of the time series is captured, but the forecast does drastically miss its predictions for the start of 2017. It looks like it was expecting the trend from 2007-2015 to continue, but as you can see from the observed values, in 2016 and 2017 there was significantly less dip at the beginning of the year.</p>
+<pre class="r"><code>fit.lm &lt;- tslm(theft_train ~ season + trend)
+fc.lm &lt;- forecast(fit.lm, h = 6)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/create_plot-1.png" alt="Fig.5" width="672" />
+<p class="caption">
+(#fig:create_plot)Fig.5
+</p>
+</div>
+<p>With this model, I have lowered the MAPE by around 22%. This is a pretty sizeable increase in accuracy, but it means I am still off by hundreds of thefts per month(when you simplify things greatly).</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Model</th>
+<th align="right">RMSE</th>
+<th align="right">MAPE</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Mean</td>
+<td align="right">195.5178</td>
+<td align="right">7.980466</td>
+</tr>
+<tr class="even">
+<td align="left">Seasonal Naive</td>
+<td align="right">213.0270</td>
+<td align="right">9.342649</td>
+</tr>
+<tr class="odd">
+<td align="left">Drift</td>
+<td align="right">256.0432</td>
+<td align="right">10.600292</td>
+</tr>
+<tr class="even">
+<td align="left">Linear Model</td>
+<td align="right">180.8603</td>
+<td align="right">6.543581</td>
+</tr>
+</tbody>
+</table>
+<p>A useful diagnostic is checking the correlations of the residuals. If there are noticable patterns or significant residuals, that is an indication that useful information remains in the residuals.</p>
+<pre class="r"><code>tsdisplay(fit.lm$residuals, main = &quot;Linear Model Residuals&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/lm_residual_diagnostics-1.png" alt="Fig.6" width="672" />
+<p class="caption">
+(#fig:lm_residual_diagnostics)Fig.6
+</p>
+</div>
+<p>Looking at the top plot of the residuals themselves, portions of it appear random(as it should if we captured all the information) and other parts have clear trends present. This is highlighted again in the Acf and Pacf correlation plots. Essentially, I have dealt with some of the information, but a good amount still remains. Let’s check out an ARIMA model to see if I can do a little better.</p>
+</div>
+<div id="arima-model" class="section level3">
+<h3>ARIMA Model</h3>
+<div id="model-overview" class="section level5">
+<h5>Model Overview</h5>
+<p>ARIMA models–or Autoregressive Integrated Moving Average Models– are a staple in forecasting. They tend to handle seasonality quite well and as a bonus, you can create more complex models by adding regressor terms to the model with additional information. In our case, after a good deal of wrangling, an ARIMA model turned out to be quite good.</p>
+<p>The first step to fitting an ARIMA model is to check if the time series is stationary. This means you don’t want the data to have any trends or seasonality. You want stationary data because this allows you to model under the assumption that the mean, variance and covariance are constant over time. Since an ARIMA model is essentially a form of regression, this assumption is crucial to obtaining useful forecasts. First, I look at our base time series.</p>
+<pre class="r"><code>tsdisplay(theft_train, main = &quot;Original Data&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/stationarity_check-1.png" alt="Fig.7" width="672" />
+<p class="caption">
+(#fig:stationarity_check)Fig.7
+</p>
+</div>
+<p>There is both monthly seasonality and a slight upward trend in the time series. I can easily fix this with some differencing. Instead of looking at the original values of the time series, I compute the difference between observations and use those values instead. Here, I compute differences with a lag of 12 (for monthly seasonality).</p>
+<pre class="r"><code>tsdisplay(diff(theft_train, 12), main = &quot;Seasonally Differenced Data&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/stationary_data-1.png" alt="Fig.8" width="672" />
+<p class="caption">
+(#fig:stationary_data)Fig.8
+</p>
+</div>
+<p>As you can see in Fig.8, the data no longer has any obvious seasonality. While it seems like we <em>could</em> difference once more to eliminate what seems like some trends, this first set of differencing passes the Augmented Dickey-Fuller test for stationarity(large p-values indicate non-stationary data). As is the case with modeling in general, the amount of differencing needed can be a little subjective. I went with the seasonally differenced data since it ended up performing best in the modeling.</p>
+<pre><code>## 
+##  Augmented Dickey-Fuller Test
+## 
+## data:  diff(theft_train, 12)
+## Dickey-Fuller = -3.8727, Lag order = 4, p-value = 0.018
+## alternative hypothesis: stationary</code></pre>
+<p>Once you have stationary data, the ARIMA model consists of two basic parts–an AR and a MA set of terms. The autoregressive terms are linear combinations of past values of the variable. You are regressing the data against past versions of itself rather than some outside variable. More formally, the autogressive model goes as follows <span class="math display">\[{y}_{t} = {c} + {\phi}_{1}{y}_{t-1} + {\phi}_{2}{y}_{t-2} + ... + {\phi}_{p}{y}_{t-p} + {e}_{t}\]</span> where <span class="math inline">\({e}_{t}\)</span> is a noise term and the rest is a multiple regression model but with lagged values (i.e. <span class="math inline">\({y}_{t-1}\)</span>) as predictors.</p>
+<p>The moving average model takes a different approach and uses forecast errors to build a model. Formally, the moving average model is written as <span class="math display">\[{y}_{t} = {c} + {e}_{t} + {\theta}_{1}{e}_{t-1} + {\theta}_{2}{e}_{t-2} + ... + {\theta}_{q}{e}_{t-q}\]</span> where <span class="math inline">\({e}_{t}\)</span> is again a noise term. When viewed this way, <span class="math inline">\({y}_{t}\)</span> is best thought of as a moving average of the last couple of forecasting errors. So a moving average model is in some sense regressing over our previous forecast errors to give us an idea of how good the forecast is.</p>
+<p>You combine the AR and MA components to form the intimidating looking full ARIMA model. <span class="math display">\[{y&#39;}_{t} = {c} + {\phi}_{1}{y&#39;}_{t-1} + ... + {\phi}_{p}{y&#39;}_{t-p} + {\theta}_{1}{e}_{t-1} + ... + {\theta}_{q}{e}_{t-q} + {e}_{t}\]</span> The main difference here is that the <span class="math inline">\({y&#39;}\)</span> terms are the <em>differenced</em> series we calculated above rather than the original one. You specify this model by saying it’s an ARIMA(p, d, q) model where</p>
+<ul>
+<li><span class="math inline">\({p}\)</span> = the order(or number of terms) of the autoregressive part</li>
+<li><span class="math inline">\({d}\)</span> = the degree of differencing involved</li>
+<li><span class="math inline">\({q}\)</span> = the order of the moving average component</li>
+</ul>
+<p>Since we have already seen that we have significant seasonality in our data, a seasonal ARIMA model is more appropriate. You specify this model in a similar manner – ARIMA(p, d, q)(P, D, Q)– where the second bracket contains the same information as above, but for the seasonal component. Behind the scenes, R will take this model and estimate our parameters using maximum likelihood estimation(MLE).</p>
+<p>This is all a vast simplification of the entire process, but a more in depth discussion is beyond the scope of this post. For a great in depth discussion of what this model involves you can look <a href="http://otexts.org/fpp2/ch-arima.html">here</a>.</p>
+</div>
+<div id="determining-model-orders" class="section level5">
+<h5>Determining Model Orders</h5>
+<p>The hardest part of fitting an ARIMA model was definitely figuring out the order needed to best fit the data. There are a lot of guides out there, but the general idea is to add terms until you aren’t seeing significant correlation in the Acf or Pacf plots. You might not be able to remove all significant peaks, but you should try to minimize the number as best you can.</p>
+<p>So first I fit a model just with the seasonal differencing applied.</p>
+<pre class="r"><code>fitting.frame &lt;- Arima(theft_train, order = c(0, 0, 0), seasonal = c(0,1,0))
+tsdisplay(fitting.frame$residuals, main = &#39;Seasonally Differenced Residuals&#39;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/seasonal_diff_model-1.png" alt="Fig.9" width="672" />
+<p class="caption">
+(#fig:seasonal_diff_model)Fig.9
+</p>
+</div>
+<p>In Fig.9 you see a lot of significant peaks in both the Acf and Pacf plots, as well as what appears to be seasonal peaks at 12 and 24 months on the Pacf plot. Those seasonal peaks lead me to believe 2 seasonal MA terms might be appropriate.</p>
+<pre class="r"><code>fitting.frame2 &lt;- Arima(theft_train, order = c(0, 0, 0), seasonal = c(0,1, 2))
+tsdisplay(fitting.frame2$residuals, main = &#39;Diff + Seasonal MA Residuals&#39;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/seasonal_diff_model2-1.png" alt="Fig.10" width="672" />
+<p class="caption">
+(#fig:seasonal_diff_model2)Fig.10
+</p>
+</div>
+<p>In Fig.10, you see the result of those two seasonal MA terms. I have removed the seasonal peaks at 12 and 24, but there are still large peaks at 1 on both plots, so some sort of AR terms are needed.</p>
+<pre class="r"><code>fitting.frame3 &lt;- Arima(theft_train, order = c(1, 0, 0), seasonal = c(1, 1, 2))
+tsdisplay(fitting.frame3$residuals, main = &#39;Diff + Seasonal MA + AR Residuals&#39;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/seasonal_diff_model3-1.png" alt="Fig.11" width="672" />
+<p class="caption">
+(#fig:seasonal_diff_model3)Fig.11
+</p>
+</div>
+<p>Again, there is clear improvement. Fig.11 shows very little seasonality, but there are still significant peaks. It won’t always be possible to remove all significant peaks, but I wanted to push the model to its limit before giving up. From this point it was more trial and error than an exact science. I went through and progressively added more nonseasonal MA terms until I minimized the MAPE of the model.</p>
+<pre class="r"><code>fit.arima &lt;- Arima(theft_train, order = c(1, 0, 17), seasonal = c(1, 1, 2))
+tsdisplay(fit.arima$residuals, main = &#39;Final ARIMA Model Residuals&#39;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/final_arima_model-1.png" alt="Fig.12" width="672" />
+<p class="caption">
+(#fig:final_arima_model)Fig.12
+</p>
+</div>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Model</th>
+<th align="right">RMSE</th>
+<th align="right">MAPE</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Mean</td>
+<td align="right">195.51783</td>
+<td align="right">7.980466</td>
+</tr>
+<tr class="even">
+<td align="left">Seasonal Naive</td>
+<td align="right">213.02699</td>
+<td align="right">9.342649</td>
+</tr>
+<tr class="odd">
+<td align="left">Drift</td>
+<td align="right">256.04321</td>
+<td align="right">10.600292</td>
+</tr>
+<tr class="even">
+<td align="left">Linear Model</td>
+<td align="right">180.86034</td>
+<td align="right">6.543581</td>
+</tr>
+<tr class="odd">
+<td align="left">Baseline Arima</td>
+<td align="right">213.02699</td>
+<td align="right">9.342649</td>
+</tr>
+<tr class="even">
+<td align="left">ARIMA 2</td>
+<td align="right">220.85848</td>
+<td align="right">7.841171</td>
+</tr>
+<tr class="odd">
+<td align="left">ARIMA 3</td>
+<td align="right">118.39074</td>
+<td align="right">5.670737</td>
+</tr>
+<tr class="even">
+<td align="left">Final ARIMA</td>
+<td align="right">94.55686</td>
+<td align="right">4.366930</td>
+</tr>
+</tbody>
+</table>
+<p>In the final model, there are still significant peaks at 21 and 22, but removing these with more terms resulted in lower model accuracy. The final model beat our best baseline model by about 83%. Looking at the fitted values, they tend to capture the amplitude of the peaks and valleys a little better. I’m still missing the dips in 2016 and 2017, but given how far from the norm that portion of the data is I’m not sure I <em>can</em> capture it with a purely time series based model. While this is by no means a <em>great</em> model, I’m generally accurate to within a hundred crimes or so. Not too bad for a first attempt.</p>
+<div class="figure" style="text-align: center">
+<img src="/post/2017-10-13-a-forecasters-folly_files/figure-html/ARIMA_forecast_plot-1.png" alt="Fig.13" width="672" />
+<p class="caption">
+(#fig:ARIMA_forecast_plot)Fig.13
+</p>
+</div>
+</div>
+</div>
+<div id="conclusion" class="section level3">
+<h3>Conclusion</h3>
+<p>Overall, I am pretty happy with how this model turned out. There are significant restrictions to approaching this forecasting problem with <em>only</em> temporal data. In the real world, whether a crime is committed is not solely determined by the time of day/month/year. By restricting the forecast to this sort of data, we are missing out on all sorts of spatial, weather, crowd-behavior and a whole host of other effects which certainly play a part in the rate of crime. To achieve an 80+% error rate reduction over mean value forecasting–or an 110+% reduction over seasonal naive forecasting which is commonly used in <em>real</em> police departments– is pretty satisfying. With that said, I’d be remiss if I didn’t acknowledge the possibility that this model is overfit to the data. I tinkered extensively with the number of terms to add to the model and ended up with 22 in total. I think it is quite probable that this resulted in overfitting. The good news is that I was able to achieve similar levels of performance with about half the terms. I think a simpler model would generalize better to future datasets, but at this point that is just speculation.</p>
+<p>This project ended up being significantly more challenging that I anticipated. In the future I am going to try and writeup my intial approach to weekly forecasting which just never panned out. I was unable to handle the amount of variability in that sort of time series and I don’t think I was approaching the forecasting quite right. Hopefully, after some more research I can try to tackle that again. I do think I learned a significant amount of practical knowledge that will transfer to future modeling projects, so even with that set back, I don’t think all this was in vain. Eventually I am going to incorporate this model into an app of sorts, though I am undecided whether it will be this exact model or perhaps a retooled weekly version.</p>
+<p>To sum it all up, I really enjoyed learning some of these forecasting methods. In a world where predictive analytics is more and more common, I don’t think this sort of knowledge will go unused. With respect to the crime forecasting problem specifically, I have a bunch of exciting ideas I’d like to try in the future. A particuarly exciting area is the use of Gaussian Processes to predict crimes. While significantly more advanced, this approach has the tremendous advantage of being able to incorporate both spatial <em>and</em> temporal data. In terms of useful predictive forecasts, this is a clear step up. Now it’s just a matter of learning how to implement it.</p>
+<p>Until next time, happy forecasting.</p>
+</div>
+</div>
