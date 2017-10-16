@@ -562,7 +562,7 @@ into an app of sorts, though I am undecided whether it will be this exact model 
 
 To sum it all up, I really enjoyed learning some of these forecasting methods.  In a world where predictive analytics is
 more and more common, I don't think this sort of knowledge will go unused. With respect to the crime forecasting problem 
-specifically, I have a bunch of exciting ideas I'd like to try in the future.  A particuarly exciting area is the use of Gaussian Processes to 
+specifically, I have a bunch of exciting ideas I'd like to try in the future.  A particuarly exciting area is the use of [Gaussian Processes](https://www.ml.cmu.edu/research/dap-papers/dap_flaxman.pdf) to 
 predict crimes.  While significantly more advanced, this approach has the tremendous advantage of being able to incorporate both
 spatial *and* temporal data.  In terms of useful predictive forecasts, this is a clear step up. Now it's just a matter of learning how
 to implement it.
