@@ -63,7 +63,7 @@ source in that script and use the same data cleaning functions as before to tidy
 the new data.  It's always a great feeling when you can reuse 
 old work.  If you are interested, you can find that script [here](https://github.com/Grollus/LouisvilleCrime/blob/master/louisville_raw_data_and_geocoding.R).
 
-```{r load_data}
+```{r load-data}
 # Source in the necessary functions from our geocoding script
 source('louisville_raw_data_and_geocoding.R')
 
@@ -94,7 +94,7 @@ not all of these get used in a final model, but I want to play around with them 
 * Season
 * a new Date variable that is class Date
 
-```{r create_new_variables, dependson = 'load_data'}
+```{r create-new-variables, dependson = 'load_data'}
 # Creates a number of useful date variables from POSIXct object
 create_date_variables <- function(df){
   require(lubridate)
@@ -128,7 +128,7 @@ crime_lou$season <- getSeason(crime_lou$date)
 Now, after removing records with incorrect/non-Louisville zipcodes, removing pre-2007 records and trimming the data so I end
 with a full month, I can aggregate our data and transform it into a time series. 
 
-```{r basic_filtering, dependson = 'load_data', echo = FALSE}
+```{r basic-filtering, dependson = 'load_data', echo = FALSE}
 # Scrape the official list of Louisville zip codes (does not include 
 # the 'nonstandard' zip codes i.e. PO Box or business zip codes)
 library(rvest)
@@ -146,7 +146,7 @@ crime_lou <- crime_lou%>%
   filter(date <= "2017-06-30")
 ```
 
-```{r aggregation_and_time_series_creation, dependson = 'load_data'}
+```{r aggregation-and-time-series-creation, dependson = 'load_data'}
 # Aggregate function
 # Takes in 
     # 1) crime : nibrs_code used for filtering
@@ -179,7 +179,7 @@ After all this, I am left with the chaotic looking time series below.  Just from
 it's immediately obvious there is some sort of parabolic looking seasonal pattern within each year.
 Additionally, it appears that there is a slight upward trend to the data--especially seen in 2016.
 
-```{r basic_timeseries, dependson= 'load_data', echo = FALSE, fig.align = 'center', fig.cap = 'Fig.1'}
+```{r basic-timeseries, dependson= 'load_data', echo = FALSE, fig.align = 'center', fig.cap = 'Monthly Thefts Time Series'}
 autoplot(theft_train)+
   xlab("")+
   ylab("Monthly Thefts")+
@@ -195,7 +195,7 @@ summer. After a peak towards the end of summer, thefts gradually drop off throug
 The variance you see between the years must be a combination of other factors, but the basic seasonal pattern is
 consistent over the years and therefore should be informative in our models.
 
-```{r basic_yearly_plot, dependson = 'load_data', echo = FALSE, fig.align = 'center', fig.cap = 'Fig.2'}
+```{r basic-yearly-plot, dependson = 'load_data', echo = FALSE, fig.align = 'center', fig.cap = "Theft Breakdown by Year"}
 thefts_yw %>%
   filter(year != 2017)%>%
   ggplot( aes(x = month, y = count, group = year, colour = year))+
@@ -206,7 +206,7 @@ thefts_yw %>%
                        breaks = c(seq(2007, 2016, by = 1)))+
   xlab("")+
   ylab("Theft Count")+
-  labs(title = "Number of Thefts by Month, 2007-2016")+
+  labs(title = "Theft Counts, 2007-2016")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
   theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))
 
@@ -227,7 +227,7 @@ first data point to the last and uses that lines slope to forecast the time peri
 this post, we will use the 2007-2016 data to train the models and then test them against
 the data from January 2017 - June 2017.
 
-```{r naive_baselines, dependson= 'load_data', fig.align = 'center'}
+```{r naive-baselines, dependson= 'load_data', fig.align = 'center'}
 # Train Baseline Models
 fit.mean <- meanf(theft_train, h = 6, level = 0.95)
 fit.snaive <- snaive(theft_train, h = 6, level = 0.95)
@@ -262,7 +262,7 @@ rise back to 'normalcy' in March.  No matter how good the model, when the future
 performance is going to drop. Part of the challenge in forecasting is working through these changes in your
 data and figuring out if there were signs you could have observed that would have warned you of these changes.
 
-```{r 2016_2017_comparison, dependson='load_data', echo = FALSE, fig.align = 'center', fig.cap = 'Fig.3'}
+```{r 2016-2017-comparison, dependson='load_data', echo = FALSE, fig.align = 'center', fig.cap = '2016 v 2017 Theft Comparison'}
 thefts_yw %>%
   filter(year >= 2016)%>%
   ggplot( aes(x = month, y = count, group = year, colour = year))+
@@ -273,7 +273,7 @@ thefts_yw %>%
                        breaks = c(seq(2016, 2017, by = 1)))+
   xlab("")+
   ylab("Theft Count")+
-  labs(title = "Number of Thefts by Month, 2016 v 2017")+
+  labs(title = "Number of Thefts, 2016 v 2017")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
   theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))
 ```
@@ -290,7 +290,7 @@ The trend term is just the linear models calculation of the general upward or do
 You can get a good visualization of both the seasonal and trend components by [decomposing](http://otexts.org/fpp2/classical-decomposition.html) 
 the time series.
 
-```{r decomposition_plot, dependson= 'load_data', fig.align = 'center', fig.cap = 'Fig.4'}
+```{r decomposition-plot, dependson= 'load_data', fig.align = 'center', fig.cap = 'Time Series Decomposition'}
 plot(stl(theft_train, s.window = 'periodic'))
 ```
 
@@ -310,12 +310,12 @@ miss its predictions for the start of 2017. It looks like it was expecting the t
 can see from the observed values, in 2016 and 2017 there was significantly less dip at the beginning of the year. 
 
 
-```{r lm_fit, dependson='load_data'}
+```{r lm-fit, dependson='load_data'}
 fit.lm <- tslm(theft_train ~ season + trend)
 fc.lm <- forecast(fit.lm, h = 6)
 ```
 
-```{r create_plot, dependson='load_data', echo = FALSE, fig.align = 'center', fig.cap = 'Fig.5'}
+```{r create-plot, dependson='load_data', echo = FALSE, fig.align = 'center', fig.cap = 'Linear Model Fit'}
 #--Produces a data.frame with the Source Data+Training Data, Fitted Values+Forecast Values, forecast data Confidence Intervals
 # Create a dataframe specifically for plotting. You end up
 # having to do a bit of manipulation with converting year variables to dates and then 
@@ -349,7 +349,7 @@ ggplot(plot_df, aes(x = date, y = observed, col = 'black'))+
   scale_color_manual(name = "", values = c('black' = "black", 'red' = 'red'), labels = c("Observed", "Fitted"))+
   xlab("")+
   ylab("Monthly Thefts")+
-  labs(title = "Linear Model Observed v Fitted, 2007-2017")+
+  labs(title = "Linear Model: Observed v Fitted")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
   theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))
 ```
@@ -357,7 +357,7 @@ ggplot(plot_df, aes(x = date, y = observed, col = 'black'))+
 With this model, I have lowered the MAPE by around 22%. This is a pretty sizeable 
 increase in accuracy, but it means I am still off by hundreds of thefts per month(when you simplify things greatly).
 
-```{r lm_accuracy, dependson= 'load_data', echo = FALSE}
+```{r lm-accuracy, dependson= 'load_data', echo = FALSE}
 acc.lm <- accuracy(forecast(fit.lm, h = 6), theft_test)
 
 acc_df <- bind_rows(acc_df, data.frame(Model = "Linear Model",
@@ -369,7 +369,7 @@ acc_df
 A useful diagnostic is checking the correlations of the residuals. If there are noticable patterns or significant residuals, 
 that is an indication that useful information remains in the residuals.
 
-```{r lm_residual_diagnostics, dependson= 'load_data', fig.align = 'center', fig.cap = 'Fig.6'}
+```{r lm-residual-diagnostics, dependson= 'load_data', fig.align = 'center', fig.cap = 'Linear Model Residual Diagnostics'}
 tsdisplay(fit.lm$residuals, main = "Linear Model Residuals")
 ```
 
@@ -379,7 +379,7 @@ with some of the information, but a good amount still remains.  Let's check out 
 
 ###ARIMA Model
 
-#####Model Overview
+####Model Overview
 ARIMA models--or Autoregressive Integrated Moving Average Models-- are a staple in forecasting. They tend to handle seasonality 
 quite well and as a bonus, you can create more complex models by adding regressor terms to the model with additional information.
 In our case, after a good deal of wrangling, an ARIMA model turned out to be quite good.
@@ -389,7 +389,7 @@ to have any trends or seasonality.  You want stationary data because this allows
 mean, variance and covariance are constant over time. Since an ARIMA model is essentially a form of regression, this assumption 
 is crucial to obtaining useful forecasts.  First, I look at our base time series.
 
-```{r stationarity_check, dependson= 'load_data', fig.align = 'center', fig.cap = 'Fig.7'}
+```{r stationarity-check, dependson= 'load_data', fig.align = 'center', fig.cap = 'Checking data for stationarity'}
 tsdisplay(theft_train, main = "Original Data")
 ```
 
@@ -397,7 +397,7 @@ There is both monthly seasonality and a slight upward trend in the time series. 
 Instead of looking at the original values of the time series, I compute the difference between observations and use those
 values instead. Here, I compute differences with a lag of 12 (for monthly seasonality).
 
-```{r stationary_data, dependson= 'load_data', fig.align='center', fig.cap = 'Fig.8'}
+```{r stationary-data, dependson= 'load_data', fig.align='center', fig.cap = 'Stationarity check after seasonal differencing'}
 tsdisplay(diff(theft_train, 12), main = "Seasonally Differenced Data")
 ```
 
@@ -407,7 +407,7 @@ for stationarity(large p-values indicate non-stationary data). As is the case wi
 modeling in general, the amount of differencing needed can be a little subjective. I went with the seasonally differenced data since
 it ended up performing best in the modeling.
 
-```{r adf_test, dependson= 'load_data', echo = FALSE}
+```{r adf-test, dependson= 'load_data', echo = FALSE}
 tseries::adf.test(diff(theft_train, 12), alternative = 'stationary')
 ```
 
@@ -441,19 +441,19 @@ This is all a vast simplification of the entire process, but a more in depth dis
 For a great in depth discussion of what this model involves you can look [here](http://otexts.org/fpp2/ch-arima.html).
 
 
-#####Determining Model Orders
+####Determining Model Orders
 The hardest part of fitting an ARIMA model was definitely figuring out the order needed to best fit the data. There 
 are a lot of guides out there, but the general idea is to add terms until you aren't seeing significant
 correlation in the Acf or Pacf plots. You might not be able to remove all significant peaks, but you should try to minimize
 the number as best you can. 
 
 So first I fit a model just with the seasonal differencing applied.
-```{r seasonal_diff_model, dependson='load_data', fig.align = 'center', fig.cap = 'Fig.9'}
+```{r seasonal-diff-model, dependson='load_data', fig.align = 'center', fig.cap = 'Residuals of ARIMA model with seasonal differencing term'}
 fitting.frame <- Arima(theft_train, order = c(0, 0, 0), seasonal = c(0,1,0))
 tsdisplay(fitting.frame$residuals, main = 'Seasonally Differenced Residuals')
 ```
 
-```{r seasonal_diff_model_acc, dependson='load_data', echo = FALSE}
+```{r seasonal-diff-model-acc, dependson='load_data', echo = FALSE}
 acc.arima1 <- accuracy(forecast(fitting.frame, h = 6), theft_test)
 
 acc_df <- bind_rows(acc_df, data.frame(Model = "Baseline Arima",
@@ -466,13 +466,13 @@ seasonal peaks at 12 and 24 months on the Pacf plot.  Those seasonal peaks lead 
 MA terms might be appropriate. 
 
 
-```{r seasonal_diff_model2, dependson='load_data', fig.align = 'center', fig.cap = 'Fig.10'}
+```{r seasonal-diff-model2, dependson='load_data', fig.align = 'center', fig.cap = 'ARIMA(0,0,0)(0,1,2) Residuals'}
 fitting.frame2 <- Arima(theft_train, order = c(0, 0, 0), seasonal = c(0,1, 2))
 tsdisplay(fitting.frame2$residuals, main = 'Diff + Seasonal MA Residuals')
 ```
 
 
-```{r seasonal_diff_model2_acc, dependson='load_data', echo = FALSE}
+```{r seasonal-diff-model2-acc, dependson='load_data', echo = FALSE}
 acc.arima2 <- accuracy(forecast(fitting.frame2, h = 6), theft_test)
 
 acc_df <- bind_rows(acc_df, data.frame(Model = "ARIMA 2",
@@ -483,12 +483,12 @@ acc_df <- bind_rows(acc_df, data.frame(Model = "ARIMA 2",
 In Fig.10, you see the result of those two seasonal MA terms. I have removed the seasonal peaks at 12 and 24,
 but there are still large peaks at 1 on both plots, so some sort of AR terms are needed.
 
-```{r seasonal_diff_model3, dependson='load_data', fig.align = 'center', fig.cap = 'Fig.11'}
+```{r seasonal-diff-model3, dependson='load_data', fig.align = 'center', fig.cap = 'ARIMA(1,0,0)(1, 1, 2) Residuals'}
 fitting.frame3 <- Arima(theft_train, order = c(1, 0, 0), seasonal = c(1, 1, 2))
 tsdisplay(fitting.frame3$residuals, main = 'Diff + Seasonal MA + AR Residuals')
 ```
 
-```{r seasonal_diff_model3_acc, dependson='load_data', echo = FALSE}
+```{r seasonal-diff-model3-acc, dependson='load_data', echo = FALSE}
 acc.arima3 <- accuracy(forecast(fitting.frame3, h = 6), theft_test)
 
 acc_df <- bind_rows(acc_df, data.frame(Model = "ARIMA 3",
@@ -502,12 +502,12 @@ From this point it was more trial and error than an exact science. I went throug
 MA terms until I minimized the MAPE of the model.
 
 
-```{r final_arima_model, dependson= 'load_data', fig.align = 'center', fig.cap = 'Fig.12'}
+```{r final-arima-model, dependson= 'load_data', fig.align = 'center', fig.cap = 'Final ARIMA(1, 0, 17)(1, 1, 2) Model Residuals'}
 fit.arima <- Arima(theft_train, order = c(1, 0, 17), seasonal = c(1, 1, 2))
 tsdisplay(fit.arima$residuals, main = 'Final ARIMA Model Residuals')
 ```
 
-```{r final_arima_model_acc, dependson='load_data', echo = FALSE}
+```{r final-arima-model-acc, dependson='load_data', echo = FALSE}
 acc.final.arima <- accuracy(forecast(fit.arima, h = 6), theft_test)
 
 acc_df <- bind_rows(acc_df, data.frame(Model = "Final ARIMA",
@@ -524,7 +524,7 @@ with a purely time series based model. While this is by no means a *great* model
 within a hundred crimes or so. Not too bad for a first attempt.
 
 
-```{r, ARIMA_forecast_plot, dependson= c('load_data','create_plot'), fig.align = 'center', fig.cap = 'Fig.13', echo = FALSE}
+```{r, ARIMA-forecast-plot, dependson= c('load_data','create_plot'), fig.align = 'center', fig.cap = 'ARIMA Model Fit', echo = FALSE}
 arima_df <- funggcast(theft_ts, forecast(fit.arima, h =6))
 
 ggplot(arima_df, aes(x = date, y = observed, col = 'black'))+
@@ -534,7 +534,7 @@ ggplot(arima_df, aes(x = date, y = observed, col = 'black'))+
   scale_color_manual(name = "", values = c('black' = "black", 'red' = 'red'), labels = c("Observed", "Fitted"))+
   xlab("")+
   ylab("Monthly Thefts")+
-  labs(title = "ARIMA Model Observed v Fitted, 2007-2017")+
+  labs(title = "ARIMA Model: Observed v Fitted")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
   theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))
 
