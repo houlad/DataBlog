@@ -1,0 +1,352 @@
+---
+title: Violent Crime Revisited
+author: Me
+date: '2018-01-04'
+slug: violent-crime-revisited
+categories:
+  - Crime
+tags:
+  - R
+  - Statistics
+  - Visualization
+---
+
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, cache = FALSE)
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+```{r data_load, include = FALSE, cache = TRUE}
+raw_data <- read_rds('lou_crime_geocoded_df.rds.gzip')
+crime_lou <- raw_data%>%
+  filter(year <=2016 & year >=2005)
+
+density.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+```
+
+Occasionally I like to revisit my old blog posts.  Since I try to treat them as a means to enhance my data science
+toolkit, old posts will often look quite naive when viewed several months (or years) down the road. 
+But, these (often embarrassing) periods of reflection end up being great teaching moments.
+A perfect example of this occurred when I was looking back through my examination of violent crime in Louisville.
+While, in general, I stand by the conclusions of that report, my analysis of the daily violent crime distributions never felt
+like the correct method of determining significance. In that post, I was examining the 2016 daily distribution of violent crimes
+to see if it truly was an exceptionally bad year for violent crime. Leveraging the distributions in Figure 1,
+I determined that there was a statistically significant difference in the mean number of violent crimes per day in 2016
+vs 2005-2015.
+
+```{r real_data_dist_plot, dependson= 'data_load', echo = FALSE, fig.align= 'center', fig.cap = 'Fig.1'}
+daily_sums_by_year <- crime_lou%>%
+  filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
+  group_by(year = as.factor(year), yday = as.factor(yday))%>%
+  summarise(count = n())%>%
+  filter(!(yday == 1|yday == 366))
+
+ggplot(daily_sums_by_year%>%filter(year != 2016), aes(x = count, fill = 'darkblue'))+
+  geom_density(alpha = .4)+
+  geom_density(data = daily_sums_by_year%>%filter(year == 2016), aes(x = count, fill = 'darkred'), alpha = .4)+
+  scale_fill_identity(name = 'Year', guide = 'legend', labels = c('2005-2015', '2016'))+
+  labs(x = 'Daily Violent Crime Count', y = 'Density')+
+  density.theme
+
+sums_2005_2015 <- daily_sums_by_year%>%
+  filter(year != 2016)
+sums_2016 <- daily_sums_by_year%>%
+  filter(year == 2016)
+
+t.test(sums_2016$count, mu = mean(sums_2005_2015$count))
+```
+
+### To T-test, Or Not To T-test, That Is The Question
+
+Several things about that analysis always seemed off though.  In effect, that analysis was asking if the daily
+values I saw in 2016 were consistent with a world where the true violent crime rate was given by the mean daily average 
+from 2005-2015 -- in this case `r round(mean(sums_2005_2015$count), 2)` crimes per day. In my analysis,
+the answer to this question was no, the 2016 values seemed to come from a different distribution. 
+
+However, in statistics, there are a thousand tests to run and *choosing* the right one is a non-trivial
+process.  Using the wrong test can, and often does, lead to incorrect conclusions. 
+By using a t-test, I am making a decision to collapse my data significantly.
+I start with a detailed account of 12 years of crimes, but I end up reducing the data set down to two numbers--
+a mean for 2005-2015 and a mean for 2016.  This sort of analysis doesn't take advantage of my rich data set
+and unnecessarily gets rid of valuable information. That's generally a bad idea when doing data analysis.
+
+Additionally, a t-test assumes that the data follows a normal distribution and has homogeneous variance.
+Though the distributions do look fairly normal, I know this data is counting the occurrences
+of an event and *that* is something modeled much more appropriately by a Poisson distribution.
+If my data is modeled by a Poisson distribution, I can use what's called a Poisson test to see whether the rate 
+parameter--in this case the expected violent crime count--is
+the same for a pair of measurements. Using some basic information about my data allows me to choose a more appropriate
+statistical test.
+
+When applying this test, I could use the daily data as I did in my initial analysis. However, the daily counts vary
+significantly and many days have very few crimes at all. Also, I don't particularly care if two single days
+have different crime rates. So instead of daily crime counts, I want to use yearly counts to test if the crime rate for
+the *year* is different. I could just as easily look at monthly or quarterly data, but a yearly rate has a nice ring to it. 
+
+
+As you can see below, the Poisson test rejects the null hypothesis that the 2015 and 2016 violent crime rates are the same. This
+indicates we can be relatively confident that the rate of violent crime went up in 2016.
+```{r poisson_test, dependson= 'data_load', echo = FALSE}
+year_sums <- daily_sums_by_year%>%
+  filter((year == 2015|year == 2016))%>%
+  group_by(year)%>%
+  summarise(total = sum(count))%>%
+  select(total)
+
+poisson.test(x = c(year_sums$total[1], year_sums$total[2]), T = c(1,1))
+
+```
+
+
+But seeing as how I'm revisiting this post, that doesn't quite satisfy my curiosity.  What if 2016 was just bad luck? 
+What if the violent crime rate didn't actually change and we just got really unlucky and 'drew' poorly from Louisville's
+Poisson crime distribution. Luckily, I can simulate 2016 data pretty easily and use that simulated data to get some
+idea of how 'unlucky' 2016 was. If I go with the assumption that 2016 is unchanged 
+from 2015, I can repeatedly draw from a poisson distribution with lambda equal to 2015's violent crime total. Doing this repeatedly 
+can tell me how often I'd see results as high as 2016's if the rate of violent crime hadn't really changed.
+
+```{r poisson_monte_carlo_sims, dependson='data_load', cache = TRUE}
+poisson_test <- function(){
+  sim_val <- rpois(1, lambda = year_sums$total[1]) # draw one sample from a poisson distribution with lambda equal to 2015 total
+  p_val <- poisson.test(x = c(year_sums$total[1], sim_val), T = c(1,1))$p.value # Perform poisson.test with simulated 2016 value and save p.values
+  return(p_val)
+}
+
+results <- replicate(10000, poisson_test()) # perform this simulation 10000 times and store the p_values
+
+# check how many times we find a significant result
+sum(results<0.05)
+```
+
+My results show that only `r sum(results < 0.05)` times out of 10,000 did I see results that would allow me 
+to reject the null hypothesis that 
+the rates were equal.  In raw numbers, this means I saw values of 4190 or higher only `r sum(results < 0.05)` times. The actual 2016 count of `r year_sums$total[2]` seems even more extreme now.  Both the Poisson test and the Poisson Monte Carlo simulations make me a little
+more confident that 2016 was an abnormally high violent crime year, but I can actually use some regression modeling techniques
+to further explore this problem.
+
+### Poisson Regression Modeling
+
+Linear regression is a fundamental technique in data science. Practitioners regularly use it to model
+the linear relationships between dependent and independent variables. Poisson regression is a generalization
+of the regression model that assumes the response variable follows a Poisson distribution. Using this assumption
+allows us to model count data like we have in our violent crime problem.  
+
+In this specific instance, I am interested in the relationship between the violent crime counts and the year.
+By looking at the strength of the year to count relationship, I should be able to gain some intuition for
+just how unusual a year 2016 was for violent crime.
+Regression modeling is pretty simple in *R*. I apply the correct filtering and then use the *glm* function to build
+a Poisson regression model.
+```{r poisson_regression, dependson='data_load', cache = TRUE}
+set.seed(1)
+# Create a df with violent crimes counts grouped by year
+df <- crime_lou%>%
+  filter(nibrs_code == '13a'|nibrs_code == '120'|nibrs_code == '09a'|nibrs_code == '11a')%>%
+  group_by(year)%>%
+  summarise(count = n())
+
+fit.poi <- glm(count ~ year, data = df, family = poisson)
+summary(fit.poi)
+```
+
+A first glance at the results seems to show year as a significant variable, but the residual deviance indicates
+a problem with our model. At `r round(fit.poi$deviance/fit.poi$df.residual, 1)` our scale 
+factor(the residual deviance divided by the degrees of freedom) is `r round(round(fit.poi$deviance/fit.poi$df.residual,1)/1,0)`
+times higher than the guideline threshold indicating overdispersed data. Essentially, this means that 
+our variance is higher than expected under the theoretical
+Poisson model. It also means that our model isn't very good, but with only 12 data points and one variable that's not
+unexpected.
+
+The basic problem with overdispersion when using Poisson regression is that you only have one free parameter. Your variance
+and mean cannot be adjusted independently due to assumptions of the model, but in practice, this assumption is often 
+unrealistic. A common method of dealing with this is to use something called a Poisson mixture model. 
+This allows for greater variability in the rate parameter (we now have 2 free parameters instead of 1) 
+and should provide a better fit to the data. A negative binomial regression model is fit in the same way as
+the Poisson regression model.
+
+```{r negative_binomial_regression, dependson='data_load', cache = TRUE}
+set.seed(1)
+fit.nb <- MASS::glm.nb(count~year, data = df)
+summary(fit.nb)
+```
+
+Our rate parameter is now a much more reasonable `r round(fit.nb$deviance/fit.nb$df.residual, 1)`, but this
+doesn't automatically make our model good. This is still an incredibly simple model
+that is missing all sorts of complexity from our full data set. With that said, the revised model doesn't
+show year as a significant variable. It doesn't appear that year alone can accurately predict the yearly 
+violent crime totals. This should not be surprising. The p-value of `r round(coef(summary(fit.nb))[2,4],3)`
+does indicate to me that there is *some* sort of relationship, however.  My guess is that it's hidden within
+some other variables. Maybe year alone doesn't predict the count very well, but perhaps something like 
+knowing the month and year does a better job. 
+
+```{r regression_plot, dependson= 'data_load', cache = TRUE, fig.align= 'center', fig.cap = 'Fig.2', echo = FALSE}
+point.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+ggplot(df, aes(x = year, y = count))+
+  geom_point()+
+  geom_line(aes(y = fitted(fit.nb)))+
+  labs(x = "Year", y = "Count")+
+  point.theme
+```
+
+When you look at Fig.2, you see that the negative binomial fit line captures the trend OK, but is way
+off for several data points.  2007, 2010, and 2016 are all well off the predicted amounts, but that's not terribly surprising
+given how simple the model is. Our simple negative binomial model with just the year variable isn't
+showing year as a significant predictor because with such a small sample and only one variable we just can't 
+adequately fit the data.
+
+If we add in another variable--something like months--then you see a different result.
+
+
+```{r negative_binomial_regression_with_months, dependson='data_load', cache = TRUE}
+set.seed(1)
+# Create a df with violent crimes counts grouped by year and month
+df2<- crime_lou%>%
+  filter(nibrs_code == '13a'|nibrs_code == '120'|nibrs_code == '09a'|nibrs_code == '11a')%>%
+  mutate(month = factor(month, ordered = FALSE))%>%
+  group_by(month, year)%>%
+  summarise(count = n())
+  
+
+fit.nb2 <- MASS::glm.nb(count ~ year + month, data = df2)
+summary(fit.nb2)
+```
+
+The addition of month as a variable completely changes the significance of the year variable. Year now shows 
+as a significant predictor with a p-value of `r round(summary(fit.nb2)$coefficients[2,4],3)`. What this likely
+means is that year alone isn't specific enough a variable to accurately predict counts. When you combine the year
+and month variables to get something like January + 2016 as a set of variables, that year portion ends up
+having much more predictive power.
+
+So what does all this regression talk mean when thinking back to my original question--did 2016 have significantly higher
+violent crime than past years? If we look at the predicted crime counts as indicated by the fit line, it would seem 
+that 2016 was significantly outside the norm. The fact the 2014 and 2015 numbers fall much closer to the fit
+line also indicates to me that part of the reason 2016 is faring so poorly when compared to the previous year is
+that the previous year was a very standard year for crime. As you can see from the plot in Fig.2, the total number
+of violent crimes per year varies a great deal.  There is a clear, worrying, upward trend,
+but it is difficult to predict exactly how bad a year is going to be. 
+
+With all that said, after performing a Poisson means test, simulating 2016 data, and fitting Poisson and negative 
+binomial regression models, I feel more at ease declaring that 2016 had unusually high violent crime.
+Modeling is a very subtle field. It is tricky to know exactly how to approach 
+a problem.  When you are unsure it's easy to fall into the trap of taking the test results as law
+even when the test might not be appropriate! As with most things in life, a responsible data scientist should always 
+question their assumptions and be prepared to laugh when we fail miserably.
+
+
+### 2017 Update!
+
+Right as I was finishing this post, 2018 rolled around and with it another full year of crime data became available to me!
+
+```{r 2017_update, echo = FALSE, fig.align='center', fig.cap = 'Fig.3', cache = TRUE}
+raw_data_2017 <- read_rds('lou_crime_geocoded_df_2017.rds')
+
+raw_data_2017 <- raw_data_2017%>%
+  mutate(incident_number = as.character(incident_number),
+         crime_type = as.character(crime_type),
+         nibrs_code = as.character(nibrs_code),
+         att_comp = as.character(att_comp),
+         lmpd_division = as.character(lmpd_division),
+         lmpd_beat = as.character(lmpd_beat),
+         premise_type = as.character(premise_type),
+         zip_code = as.character(zip_code))
+
+
+crime_lou_updated <- bind_rows(crime_lou, raw_data_2017)
+
+
+yearly_sums_updated <- crime_lou_updated%>%
+  filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
+  filter(!(yday == 1|yday == 366))%>%
+  filter(year>=2005)%>%
+  group_by(year = year)%>%
+  summarise(count = n())
+  
+
+bar.theme <- 
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title = element_text(size = 14, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
+  theme(axis.title.y = element_text(angle = 90))+
+  theme(axis.title.x = element_text(hjust = 0, vjust = 0.5))+
+  theme_bw()
+
+ggplot(yearly_sums_updated, aes(x = year, y = count, fill = 'darkblue'))+
+  stat_smooth(method = 'lm', size = 1, alpha = .3, fill = "grey", colour = "red2")+
+  geom_bar(stat = 'identity', colour = "black",fill = "darkblue",  alpha = .5)+
+  scale_x_discrete(limits = seq(2005, 2017, by = 1))+
+  ggtitle("Violent Crime, By Year")+
+  labs(x = "Year", y = "Incident Count")+
+  bar.theme
+```
+
+A quick plot of the data shows that violent crime was down in 2017 by about `r -round(((yearly_sums_updated$count[13]-yearly_sums_updated$count[12])/yearly_sums_updated$count[12])*100)`%.
+A quick Poisson test for 2016 and 2017 data indicates that the 2017 drop is significant enough to
+reject the null hypothesis that 2017's lambda rate is the same as 2016's.  Essentially, we saw a significant
+drop in violent crime in 2017.
+
+```{r poisson_test_updated, dependson="2017_update", echo= FALSE}
+year_sums_updated <- yearly_sums_updated%>%
+  filter((year == 2016|year == 2017))
+
+poisson.test(x = c(year_sums_updated$count[1], year_sums_updated$count[2]), T = c(1,1))
+```
+
+
+
+```{r poisson_monte_carlo_sims_updated, dependson='2017_update', cache = TRUE}
+poisson_sim <- function(){
+  sim_val <- rpois(1, lambda = year_sums_updated$count[1]) # draw one sample from a poisson distribution with lambda equal to 2016 total
+  return(sim_val)
+}
+
+results <- replicate(10000, poisson_sim()) # perform this simulation 10000 times and store the p_values
+
+```
+
+When we simulate 2017 data with 10,000 draws, the minimum number of crimes we see using 2016's rate as the lambda 
+parameter is `r min(results)`.  Even after running this simulation several times, I never see any draws below
+4000. This yet again indicates how unlikely it is that 2017 isn't a significant drop from 2016.
+
+###Conclusions
+
+After further analysis, it appears that 2016 really was an exceptionally bad year for violent crime.
+Visual inspection, Poisson means, Monte Carlo simulation, and Poisson regression all indicate 
+that the 2016 data fell outside the expected norm for violent crime. As a positive addendum 
+to this news, the late addition of 2017 crime data allowed me to analyze 2017's crime data in a similar 
+manner and determine that 2017 saw a significant drop in violent crime. Examining Fig.3, it's easy to see 
+that violent crime ebbs and flows in our city.  The terrific highs of 2016 were replaced by a return to 
+normalcy in 2017.  Sadly, we are going to continue to see these peak years, but I'm not
+sure focusing on one exceptionally poor year is the proper way to address this issue.  Louisville's
+violent crime is trending up. Focusing on isolated years leads to reactionary politics and rash policies.
+Louisville's leadership needs to dig in and focus on foundational changes that can be made to turn
+the troubling upward trend around.
+
+This post ended up being considerably more illustrative than I thought it would.  The challenges and nuances
+present in modeling even simple problems all reared their heads in this post. Statistics is a broad and deep
+field, and knowing what direction to head is often half the battle. In this case, the deceptively challenging
+question 'Is this change a significant one?' presented a number of sub-questions. At what aggregation level do I
+need to examine the data? How do I best model the violent crime distribution? Is modeling the distribution even the 
+correct approach--maybe I should use simulations to see how likely this result was? How about using a chi-squared
+test to see if 2016's rates are what we would expect? These and many more questions 
+all popped up during this seemingly benign analysis. This sort of wrangling is exciting and challenging to deal
+with as a practitioner of data science, but we have to be constantly vigilant while doing our analysis.  Mindlessly 
+applying tests can easily lead to completely backward conclusions and the temptation to blindly trust
+these powerful methods is strong. Statistics is a powerful tool, but great care must be taken when applying it's methods
+as it's incredibly easy to mislead people with your findings--whether you intend to or not.
+
+Until next time!
