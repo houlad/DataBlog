@@ -14,10 +14,10 @@ tags:
 
 
 <p>Occasionally I like to revisit my old blog posts. Since I try to treat them as a means to enhance my data science toolkit, old posts will often look quite naive when viewed several months (or years) down the road. But, these (often embarrassing) periods of reflection end up being great teaching moments. A perfect example of this occurred when I was looking back through my examination of violent crime in Louisville. While, in general, I stand by the conclusions of that report, my analysis of the daily violent crime distributions never felt like the correct method of determining significance. In that post, I was examining the 2016 daily distribution of violent crimes to see if it truly was an exceptionally bad year for violent crime. Leveraging the distributions in Figure 1, I determined that there was a statistically significant difference in the mean number of violent crimes per day in 2016 vs 2005-2015.</p>
-<div class="figure" style="text-align: center">
-<img src="/post/2018-01-04-violent-crime-revisited_files/figure-html/real_data_dist_plot-1.png" alt="Fig.1" width="672" />
+<div class="figure" style="text-align: center"><span id="fig:real-data-dist-plot"></span>
+<img src="/post/2018-01-04-violent-crime-revisited_files/figure-html/real-data-dist-plot-1.png" alt="Daily Violent Crime Distribution" width="672" />
 <p class="caption">
-(#fig:real_data_dist_plot)Fig.1
+Figure 1: Daily Violent Crime Distribution
 </p>
 </div>
 <pre><code>## 
@@ -60,8 +60,8 @@ results &lt;- replicate(10000, poisson_test()) # perform this simulation 10000 t
 
 # check how many times we find a significant result
 sum(results&lt;0.05)</code></pre>
-<pre><code>## [1] 47</code></pre>
-<p>My results show that only 47 times out of 10,000 did I see results that would allow me to reject the null hypothesis that the rates were equal. In raw numbers, this means I saw values of 4190 or higher only 47 times. The actual 2016 count of 4287 seems even more extreme now. Both the Poisson test and the Poisson Monte Carlo simulations make me a little more confident that 2016 was an abnormally high violent crime year, but I can actually use some regression modeling techniques to further explore this problem.</p>
+<pre><code>## [1] 51</code></pre>
+<p>My results show that only 51 times out of 10,000 did I see results that would allow me to reject the null hypothesis that the rates were equal. In raw numbers, this means I saw values of 4190 or higher only 51 times. The actual 2016 count of 4287 seems even more extreme now. Both the Poisson test and the Poisson Monte Carlo simulations make me a little more confident that 2016 was an abnormally high violent crime year, but I can actually use some regression modeling techniques to further explore this problem.</p>
 </div>
 <div id="poisson-regression-modeling" class="section level3">
 <h3>Poisson Regression Modeling</h3>
@@ -131,10 +131,10 @@ summary(fit.nb)</code></pre>
 ## 
 ##  2 x log-likelihood:  -161.714</code></pre>
 <p>Our rate parameter is now a much more reasonable 1.2, but this doesn’t automatically make our model good. This is still an incredibly simple model that is missing all sorts of complexity from our full data set. With that said, the revised model doesn’t show year as a significant variable. It doesn’t appear that year alone can accurately predict the yearly violent crime totals. This should not be surprising. The p-value of 0.113 does indicate to me that there is <em>some</em> sort of relationship, however. My guess is that it’s hidden within some other variables. Maybe year alone doesn’t predict the count very well, but perhaps something like knowing the month and year does a better job.</p>
-<div class="figure" style="text-align: center">
-<img src="/post/2018-01-04-violent-crime-revisited_files/figure-html/regression_plot-1.png" alt="Fig.2" width="672" />
+<div class="figure" style="text-align: center"><span id="fig:regression-plot"></span>
+<img src="/post/2018-01-04-violent-crime-revisited_files/figure-html/regression-plot-1.png" alt="Yearly Crime Count With Regression Line" width="672" />
 <p class="caption">
-(#fig:regression_plot)Fig.2
+Figure 2: Yearly Crime Count With Regression Line
 </p>
 </div>
 <p>When you look at Fig.2, you see that the negative binomial fit line captures the trend OK, but is way off for several data points. 2007, 2010, and 2016 are all well off the predicted amounts, but that’s not terribly surprising given how simple the model is. Our simple negative binomial model with just the year variable isn’t showing year as a significant predictor because with such a small sample and only one variable we just can’t adequately fit the data.</p>
@@ -197,10 +197,10 @@ summary(fit.nb2)</code></pre>
 <div id="update" class="section level3">
 <h3>2017 Update!</h3>
 <p>Right as I was finishing this post, 2018 rolled around and with it another full year of crime data became available to me!</p>
-<div class="figure" style="text-align: center">
-<img src="/post/2018-01-04-violent-crime-revisited_files/figure-html/2017_update-1.png" alt="Fig.3" width="672" />
+<div class="figure" style="text-align: center"><span id="fig:2017-update"></span>
+<img src="/post/2018-01-04-violent-crime-revisited_files/figure-html/2017-update-1.png" alt="Yearly Violent Crime Breakdown" width="672" />
 <p class="caption">
-(#fig:2017_update)Fig.3
+Figure 3: Yearly Violent Crime Breakdown
 </p>
 </div>
 <p>A quick plot of the data shows that violent crime was down in 2017 by about 10%. A quick Poisson test for 2016 and 2017 data indicates that the 2017 drop is significant enough to reject the null hypothesis that 2017’s lambda rate is the same as 2016’s. Essentially, we saw a significant drop in violent crime in 2017.</p>

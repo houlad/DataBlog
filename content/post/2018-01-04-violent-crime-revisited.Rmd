@@ -19,7 +19,7 @@ library(ggplot2)
 library(readr)
 ```
 
-```{r data_load, include = FALSE, cache = TRUE}
+```{r data-load, include = FALSE, cache = TRUE}
 raw_data <- read_rds('lou_crime_geocoded_df.rds.gzip')
 crime_lou <- raw_data%>%
   filter(year <=2016 & year >=2005)
@@ -43,7 +43,7 @@ to see if it truly was an exceptionally bad year for violent crime. Leveraging t
 I determined that there was a statistically significant difference in the mean number of violent crimes per day in 2016
 vs 2005-2015.
 
-```{r real_data_dist_plot, dependson= 'data_load', echo = FALSE, fig.align= 'center', fig.cap = 'Fig.1'}
+```{r real-data-dist-plot, dependson= 'data-load', echo = FALSE, fig.align= 'center', fig.cap = 'Daily Violent Crime Distribution'}
 daily_sums_by_year <- crime_lou%>%
   filter(nibrs_code == '13a' |nibrs_code == '120'| nibrs_code == '09a'|nibrs_code == '11a')%>%
   group_by(year = as.factor(year), yday = as.factor(yday))%>%
@@ -95,7 +95,7 @@ the *year* is different. I could just as easily look at monthly or quarterly dat
 
 As you can see below, the Poisson test rejects the null hypothesis that the 2015 and 2016 violent crime rates are the same. This
 indicates we can be relatively confident that the rate of violent crime went up in 2016.
-```{r poisson_test, dependson= 'data_load', echo = FALSE}
+```{r poisson-test, dependson= 'data-load', echo = FALSE}
 year_sums <- daily_sums_by_year%>%
   filter((year == 2015|year == 2016))%>%
   group_by(year)%>%
@@ -114,7 +114,7 @@ idea of how 'unlucky' 2016 was. If I go with the assumption that 2016 is unchang
 from 2015, I can repeatedly draw from a poisson distribution with lambda equal to 2015's violent crime total. Doing this repeatedly 
 can tell me how often I'd see results as high as 2016's if the rate of violent crime hadn't really changed.
 
-```{r poisson_monte_carlo_sims, dependson='data_load', cache = TRUE}
+```{r poisson-monte-carlo-sims, dependson='data-load', cache = TRUE}
 poisson_test <- function(){
   sim_val <- rpois(1, lambda = year_sums$total[1]) # draw one sample from a poisson distribution with lambda equal to 2015 total
   p_val <- poisson.test(x = c(year_sums$total[1], sim_val), T = c(1,1))$p.value # Perform poisson.test with simulated 2016 value and save p.values
@@ -145,7 +145,7 @@ By looking at the strength of the year to count relationship, I should be able t
 just how unusual a year 2016 was for violent crime.
 Regression modeling is pretty simple in *R*. I apply the correct filtering and then use the *glm* function to build
 a Poisson regression model.
-```{r poisson_regression, dependson='data_load', cache = TRUE}
+```{r poisson-regression, dependson='data-load', cache = TRUE}
 set.seed(1)
 # Create a df with violent crimes counts grouped by year
 df <- crime_lou%>%
@@ -172,7 +172,7 @@ This allows for greater variability in the rate parameter (we now have 2 free pa
 and should provide a better fit to the data. A negative binomial regression model is fit in the same way as
 the Poisson regression model.
 
-```{r negative_binomial_regression, dependson='data_load', cache = TRUE}
+```{r negative-binomial-regression, dependson='data-load', cache = TRUE}
 set.seed(1)
 fit.nb <- MASS::glm.nb(count~year, data = df)
 summary(fit.nb)
@@ -187,7 +187,7 @@ does indicate to me that there is *some* sort of relationship, however.  My gues
 some other variables. Maybe year alone doesn't predict the count very well, but perhaps something like 
 knowing the month and year does a better job. 
 
-```{r regression_plot, dependson= 'data_load', cache = TRUE, fig.align= 'center', fig.cap = 'Fig.2', echo = FALSE}
+```{r regression-plot, dependson= 'data-load', cache = TRUE, fig.align= 'center', fig.cap = 'Yearly Crime Count With Regression Line', echo = FALSE}
 point.theme <- 
   theme(legend.position = "none")+
   theme(plot.title = element_text(size = 18, family = "serif", face = 'bold', hjust = 0, color = "#666666"))+
@@ -212,7 +212,7 @@ adequately fit the data.
 If we add in another variable--something like months--then you see a different result.
 
 
-```{r negative_binomial_regression_with_months, dependson='data_load', cache = TRUE}
+```{r negative-binomial-regression-with-months, dependson='data-load', cache = TRUE}
 set.seed(1)
 # Create a df with violent crimes counts grouped by year and month
 df2<- crime_lou%>%
@@ -252,7 +252,7 @@ question their assumptions and be prepared to laugh when we fail miserably.
 
 Right as I was finishing this post, 2018 rolled around and with it another full year of crime data became available to me!
 
-```{r 2017_update, echo = FALSE, fig.align='center', fig.cap = 'Fig.3', cache = TRUE}
+```{r 2017-update, echo = FALSE, fig.align='center', fig.cap = 'Yearly Violent Crime Breakdown', cache = TRUE}
 raw_data_2017 <- read_rds('lou_crime_geocoded_df_2017.rds')
 
 raw_data_2017 <- raw_data_2017%>%
@@ -299,7 +299,7 @@ A quick Poisson test for 2016 and 2017 data indicates that the 2017 drop is sign
 reject the null hypothesis that 2017's lambda rate is the same as 2016's.  Essentially, we saw a significant
 drop in violent crime in 2017.
 
-```{r poisson_test_updated, dependson="2017_update", echo= FALSE}
+```{r poisson-test-updated, dependson="2017-update", echo= FALSE}
 year_sums_updated <- yearly_sums_updated%>%
   filter((year == 2016|year == 2017))
 
@@ -308,7 +308,7 @@ poisson.test(x = c(year_sums_updated$count[1], year_sums_updated$count[2]), T = 
 
 
 
-```{r poisson_monte_carlo_sims_updated, dependson='2017_update', cache = TRUE}
+```{r poisson-monte-carlo-sims-updated, dependson='2017-update', cache = TRUE}
 poisson_sim <- function(){
   sim_val <- rpois(1, lambda = year_sums_updated$count[1]) # draw one sample from a poisson distribution with lambda equal to 2016 total
   return(sim_val)
