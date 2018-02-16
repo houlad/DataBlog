@@ -2,7 +2,7 @@
 title: Louisville's Heroin Epidemic
 author: Adam
 date: '2017-08-18'
-slug: louisville-s-heroin-epidemic
+slug: louisvilles-heroin-epidemic
 categories:
   - City Development
   - Crime
