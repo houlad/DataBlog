@@ -95,107 +95,144 @@ tags:
 </table>
 <p>As you can see above, crimes such as theft and drug/alcohol violations make up 17% of the total number of crimes each, while arson is barely represented in the data. This means predicting something like arson will be extremely difficult without some very informative variables. Additionally, do I <em>really</em> care about all the crime distinctions. While vehicle break-in/theft and motor vehicle theft are indeed different, ultimately they are both thefts. Thankfully, the UCR(Uniform Crime Reports) provides some guidance for this sort of aggregation. There are two parts to the UCR, part 1 and part 2. Part 1 consists violent crimes and property crimes and part 2 is mainly “lesser” offenses such as vandalism, but also includes offenses such as sex crimes and fraud. The UCR can be used to (somewhat) rigorously divide the various crime types, but, ultimately, what sort of granularity to use is a modeling decision. It seems reasonable that violent crimes may share characteristics that could lead to performant models. This also seems true for something like property crimes. Part 2 of the UCR is a different bag of worms. It contains such a diverse range of crimes. Fraud doesn’t appear to have much in common with DUI’s or prostitution. The entirety of part 2 is really just a mixed bag of offenses. After a good bit of test modeling, it didn’t seem possible to classify part 2 crimes reliably in some sort of ‘other’ category. The characteristics of the crimes were just too varied. In the end, I decided to simply predict whether a crime was a property crime or a violent crime. It may not be the ideal choice, but all modeling requires tough choices and finesse.</p>
 <p>With that decision out of the way, I can label my data and cut out any remaining uninformative variables. The head of the resulting data set can be seen below.</p>
-<table>
+<table style="width:99%;">
+<caption>Table continues below</caption>
+<colgroup>
+<col width="34%" />
+<col width="15%" />
+<col width="9%" />
+<col width="11%" />
+<col width="9%" />
+<col width="18%" />
+</colgroup>
 <thead>
 <tr class="header">
-<th align="left">premise_type</th>
-<th align="left">zip_code</th>
-<th align="right">year</th>
-<th align="left">month</th>
-<th align="right">hour</th>
-<th align="left">day_of_week</th>
-<th align="left">weekday</th>
-<th align="left">season</th>
-<th align="left">lmpd_beat</th>
-<th align="right">lat</th>
-<th align="right">lng</th>
-<th align="left">crime</th>
+<th align="center">premise_type</th>
+<th align="center">zip_code</th>
+<th align="center">year</th>
+<th align="center">month</th>
+<th align="center">hour</th>
+<th align="center">day_of_week</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">highway / road / alley</td>
-<td align="left">40210</td>
-<td align="right">2005</td>
-<td align="left">May</td>
-<td align="right">16</td>
-<td align="left">Sunday</td>
-<td align="left">Weekend</td>
-<td align="left">Spring</td>
-<td align="left">223</td>
-<td align="right">38.23986</td>
-<td align="right">-85.78831</td>
-<td align="left">property</td>
+<td align="center">highway / road / alley</td>
+<td align="center">40210</td>
+<td align="center">2005</td>
+<td align="center">May</td>
+<td align="center">16</td>
+<td align="center">Sunday</td>
 </tr>
 <tr class="even">
-<td align="left">parking lot / garage</td>
-<td align="left">40205</td>
-<td align="right">2009</td>
-<td align="left">Feb</td>
-<td align="right">12</td>
-<td align="left">Saturday</td>
-<td align="left">Weekend</td>
-<td align="left">Winter</td>
-<td align="left">513</td>
-<td align="right">38.23379</td>
-<td align="right">-85.70452</td>
-<td align="left">property</td>
+<td align="center">parking lot / garage</td>
+<td align="center">40205</td>
+<td align="center">2009</td>
+<td align="center">Feb</td>
+<td align="center">12</td>
+<td align="center">Saturday</td>
 </tr>
 <tr class="odd">
-<td align="left">bar / night club</td>
-<td align="left">40202</td>
-<td align="right">2005</td>
-<td align="left">Jan</td>
-<td align="right">23</td>
-<td align="left">Saturday</td>
-<td align="left">Weekend</td>
-<td align="left">Winter</td>
-<td align="left">134</td>
-<td align="right">38.25567</td>
-<td align="right">-85.74792</td>
-<td align="left">property</td>
+<td align="center">bar / night club</td>
+<td align="center">40202</td>
+<td align="center">2005</td>
+<td align="center">Jan</td>
+<td align="center">23</td>
+<td align="center">Saturday</td>
 </tr>
 <tr class="even">
-<td align="left">residence / home</td>
-<td align="left">40229</td>
-<td align="right">2005</td>
-<td align="left">Jan</td>
-<td align="right">10</td>
-<td align="left">Sunday</td>
-<td align="left">Weekend</td>
-<td align="left">Winter</td>
-<td align="left">724</td>
-<td align="right">38.11642</td>
-<td align="right">-85.64837</td>
-<td align="left">violent</td>
+<td align="center">residence / home</td>
+<td align="center">40229</td>
+<td align="center">2005</td>
+<td align="center">Jan</td>
+<td align="center">10</td>
+<td align="center">Sunday</td>
 </tr>
 <tr class="odd">
-<td align="left">grocery / supermarket</td>
-<td align="left">40229</td>
-<td align="right">2005</td>
-<td align="left">Jan</td>
-<td align="right">1</td>
-<td align="left">Saturday</td>
-<td align="left">Weekend</td>
-<td align="left">Winter</td>
-<td align="left">724</td>
-<td align="right">38.08833</td>
-<td align="right">-85.67006</td>
-<td align="left">property</td>
+<td align="center">grocery / supermarket</td>
+<td align="center">40229</td>
+<td align="center">2005</td>
+<td align="center">Jan</td>
+<td align="center">1</td>
+<td align="center">Saturday</td>
 </tr>
 <tr class="even">
-<td align="left">residence / home</td>
-<td align="left">40215</td>
-<td align="right">2005</td>
-<td align="left">Jan</td>
-<td align="right">9</td>
-<td align="left">Sunday</td>
-<td align="left">Weekend</td>
-<td align="left">Winter</td>
-<td align="left">436</td>
-<td align="right">38.18321</td>
-<td align="right">-85.78176</td>
-<td align="left">property</td>
+<td align="center">residence / home</td>
+<td align="center">40215</td>
+<td align="center">2005</td>
+<td align="center">Jan</td>
+<td align="center">9</td>
+<td align="center">Sunday</td>
+</tr>
+</tbody>
+</table>
+<table style="width:81%;">
+<colgroup>
+<col width="13%" />
+<col width="12%" />
+<col width="16%" />
+<col width="11%" />
+<col width="12%" />
+<col width="13%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">weekday</th>
+<th align="center">season</th>
+<th align="center">lmpd_beat</th>
+<th align="center">lat</th>
+<th align="center">lng</th>
+<th align="center">crime</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">Weekend</td>
+<td align="center">Spring</td>
+<td align="center">223</td>
+<td align="center">38.24</td>
+<td align="center">-85.79</td>
+<td align="center">property</td>
+</tr>
+<tr class="even">
+<td align="center">Weekend</td>
+<td align="center">Winter</td>
+<td align="center">513</td>
+<td align="center">38.23</td>
+<td align="center">-85.7</td>
+<td align="center">property</td>
+</tr>
+<tr class="odd">
+<td align="center">Weekend</td>
+<td align="center">Winter</td>
+<td align="center">134</td>
+<td align="center">38.26</td>
+<td align="center">-85.75</td>
+<td align="center">property</td>
+</tr>
+<tr class="even">
+<td align="center">Weekend</td>
+<td align="center">Winter</td>
+<td align="center">724</td>
+<td align="center">38.12</td>
+<td align="center">-85.65</td>
+<td align="center">violent</td>
+</tr>
+<tr class="odd">
+<td align="center">Weekend</td>
+<td align="center">Winter</td>
+<td align="center">724</td>
+<td align="center">38.09</td>
+<td align="center">-85.67</td>
+<td align="center">property</td>
+</tr>
+<tr class="even">
+<td align="center">Weekend</td>
+<td align="center">Winter</td>
+<td align="center">436</td>
+<td align="center">38.18</td>
+<td align="center">-85.78</td>
+<td align="center">property</td>
 </tr>
 </tbody>
 </table>

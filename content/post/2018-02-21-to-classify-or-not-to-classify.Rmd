@@ -106,7 +106,10 @@ working_df <- df%>%
          crime = as.factor(crime),
          zip_code = as.factor(zip_code),
          lmpd_beat = as.factor(lmpd_beat))
-kable(head(working_df))
+library(pander)
+panderOptions('digits', 4)
+pander(head(working_df))
+# kable(head(working_df))
 
 ```
 
