@@ -1,0 +1,317 @@
+---
+title: Text Analysis of Presidential News Articles
+author: Adam
+date: '2018-03-14'
+slug: text-analysis-of-presidential-news-articles
+categories:
+  - Politics
+  - R
+  - Text Analysis
+tags:
+  - Tidytext
+  - R
+  - Text Analysis
+---
+
+
+
+<p>Do you live under a rock? If not, you’ve noticed that Donald Trump became president last year. No matter your feelings on the subject, most people would probably agree that seemingly everywhere you look there is a news story about something President Trump has tweeted or said (or not said). To some degree this is expected. The man is the President of the United States and his actions and decisions <em>are</em> news. But something about how he is covered by the media felt different to me. I don’t remember seeing such constant, hysterical news coverage for–well–any other president.</p>
+<p>The scientist in me immediately recognized this as an opportunity. Maybe I could quantify the media coverage of Trump and see if it differs from past presidents? This sounded like a perfect opportunity to do some text analysis and as luck would have it, I’ve been learning the in’s and out’s of David Robinson and Julia Silge’s <a href="https://cran.r-project.org/web/packages/tidytext/index.html">tidytext</a> package.</p>
+<p>In this post, I’ll use tidytext to perform text analysis on presidential news articles to see if I can detect any difference in the way Trump is covered by the media.</p>
+<div id="data-collection-and-cleaning" class="section level3">
+<h3>Data Collection and Cleaning</h3>
+<p>Our first task is to figure out what data to use. ‘Media’ is a really broad term. For this analysis, we will stick to news articles written about (specifically, in this case tagged with) Trump and several other presidents. There are a number of newspapers with API’s these days, but most of them have restrictions on the number of articles you can download or they restrict you to headlines/summaries. Luckily, The Guardian, a British newspaper, has a great API that lets you pull down full text articles <em>and</em> they have an archive of articles going back something like 20 years. Obviously, using just one source will lead to biases(I believe The Guardian is left-of-center publication), so if we were being really rigorous, we’d want to pull articles from multiple sources with counterbalancing biases. That seems like way too much effort for this sort of post. So for now, we just have to recognize that this analysis will be incomplete.</p>
+<p>With a data source in hand, we can connect to The Guardian’s API using the <a href="https://cran.r-project.org/web/packages/GuardianR/index.html">GuardianR</a> package. I wrote a simple little function that will pull articles for the given date and keyword. As of the time of this post, Trump has been president for 14 months, so I’m downloading the last 14 months worth of articles with keyword Trump. For comparison, I’m also downloading the first 14 months worth of articles for Obama and Bush’s presidencies as well as the first 14 months of President Jinping of China. Since the data takes a little while to download, I already downloaded the data, but if you want to recreate this post with up-to-date articles, you can just use the procedure below.</p>
+<pre class="r"><code># # Function to use for purrr mapping. Grabs one month of post data at a time
+#   # Key: in this case I used president names, but it could be anything really
+# get_articles &lt;- function(start, key){
+#   data &lt;- get_guardian(keyword = key,
+#                        section = &#39;world&#39;,
+#                        from.date = start,
+#                        to.date = ceiling_date(as.Date(start), &#39;month&#39;) - days(1),
+#                        api.key = &quot;your-key&quot;)
+#   data
+#   
+# }
+# 
+# # Generate the list of dates to query for each name
+# trump_dates &lt;- seq.Date(as.Date(&quot;2016-11-01&quot;), as.Date(&quot;2018-03-01&quot;), &quot;month&quot;)
+# obama_dates &lt;- seq.Date(as.Date(&quot;2008-11-01&quot;), as.Date(&quot;2010-03-01&quot;), &quot;month&quot;)
+# bush_dates &lt;- seq.Date(as.Date(&quot;2000-11-01&quot;), as.Date(&quot;2003-03-01&quot;), &quot;month&quot;)
+# jinping_dates &lt;- seq.Date(as.Date(&quot;2013-03-01&quot;), as.Date(&quot;2015-05-01&quot;), &quot;month&quot;)
+# 
+# # Use map2 to grab all articles mentioning trump, obama, bush or jinping during the first
+# # 14 months of their presidencies
+# trump_data &lt;- map2(trump_dates, &quot;Trump&quot;, get_articles)
+# obama_data &lt;- map2(obama_dates, &quot;Obama&quot;, get_articles)
+# bush_data &lt;- map2(bush_dates, &quot;Bush&quot;, get_articles)
+# jinping_data &lt;- map2(jinping_dates, &quot;Jinping&quot;, get_articles)</code></pre>
+<p>Now in it’s raw form, these data files are lists of data frames. That’s not a particularly useful format, so we can go ahead and transform the raw data into data frames and tag them with their president for future use. There’s a good amount of additional cleaning that happens, but the key points are</p>
+<ul>
+<li>Removing most of the columns– while useful for other explorations, variables like wordcount or webUrl aren’t doing anything for us here.</li>
+<li>Filtering to remove any articles from outside the period of presidency</li>
+<li>Removing html tags and features from the body of the articles</li>
+</ul>
+<pre class="r"><code># A bunch of cleaning done here. 
+
+#   - selected only the relevant columns
+#   - filtered to the 14 month period at the start of their presidency
+#   - removed html tags from the body of articles themselves
+#   - dealt with weird apostrophe encoding (was showing up as â) by subbing in &quot;&#39;&quot; 
+#     in all those appearances
+#         -originally used the extractHTMLStrip from tm.plugin.webming, but
+#           this regex gave the same result and was faster.
+#   -TODO: Still seem to be weird encoding html errors in the main text from the articles
+#          Not sure how to fix yet.
+
+
+keep &lt;- c(&#39;id&#39;, &quot;webPublicationDate&quot;, &quot;body&quot;, &#39;tag&#39;)
+df &lt;- bind_rows(t_df, j_df, o_df, b_df)%&gt;%
+  select(keep)%&gt;%
+  rename(date = webPublicationDate)%&gt;%
+  mutate(date = as.Date.factor(date))%&gt;%
+  filter((date &gt;= &#39;2017-01-20&#39; &amp; tag == &#39;Trump&#39;) | (date &gt;= &#39;2009-01-20&#39; &amp; tag == &#39;Obama&#39;)|
+           (date &gt;= &#39;2013-03-01&#39; &amp; tag == &#39;Jinping&#39;) | (date &gt;= &#39;2001-01-20&#39; &amp; tag == &#39;Bush&#39;))%&gt;%
+  # Messed up my Bush dates for some reason. This fixes the issue
+  filter(!(date &gt; &#39;2002-03-01&#39; &amp; date &lt; &#39;2004-01-01&#39;))%&gt;%
+  mutate(body = gsub(&quot;&lt;.*?&gt;&quot;, &quot;&quot;, body))%&gt;%
+  mutate(body = gsub(&quot;â&quot;, &quot;&#39;&quot;, body))</code></pre>
+<p>This leaves us with a tidy data frame of articles, their date, and which president they are related to. Now this is a format we can do something with.</p>
+</div>
+<div id="is-trump-in-the-news-more" class="section level3">
+<h3>Is Trump in the News More?</h3>
+<p>My first question is really just whether Trump is being written about more than past presidents. It’s important to keep in mind that the rate at which news articles are printed has probably changed over the years. On the one hand, online publishing means we have more articles per day that can be written. On the other, <em>what</em> is printed in papers has changed drastically over the years. Just anecdotally, my own newspaper has a lot more entertainment news these days and not necessarily as much world news. I suppose it’s possible to scrape all Guardian articles from the World section over the past 20 years to see if the publishing rate has changed, but that is a huge amount of data to download. So for simplicity’s sake, we will assume that the rate at which The Guardian has published articles has stayed constant. We won’t do anything about the potential discrepancy, but we should be aware that it’s another weak point in our analysis.</p>
+<p>With that said, if we look at the number of articles published per day for each president we immediately see a couple interesting tidbits. First, for whatever reason, The Guardian does not publish articles about Chinese presidents at nearly the same rate as US presidents. Maybe these articles are published in a different section that I’m not aware of? Second, while there <em>are</em> more Trump articles than there were Obama articles, we’ve actually seen a decrease since Bush’s first 14 months. Part of that is due to the unique circumstances of Bush’s first 14 months in office. The red line indicates the terrorist attacks of 9/11. Obviously, this event had an enormous impact , so the surge in news articles makes a lot of sense. If you exclude the 3 months after 9/11 Bush’s article average is ~1 article below Trump’s. It’s difficult to determine exactly how much those events skewed the article count, but it’s fair to assume Bush’s average would be a lot lower had those events not taken place.</p>
+<p>If we look at Trump versus Obama, we are seeing ~1 more news article per day pertaining to the current US president. It’s tough to pin down a reason for this. Maybe there’s genuinely just been more newsworthy US events in this 14 month period. But maybe Trump being president is such chaos that newspapers have more content to cover. Trump also has more variance in the number of articles each day, perhaps quantifying the sort of ebb-and-flow that has seemed to follow this presidency–periods of relative calm followed by a flurry of events out of nowhere. It’s also important to keep in mind that this is a British newspaper and it is going to reflect more of a ‘world’ view of US politics than a US based publication would. It’s entirely possible that if we gathered data from US papers, these numbers would look very different, but we are working with the data we have access to here.</p>
+<p><img src="/post/2018-03-14-text-analysis-of-presidential-news-articles_files/figure-html/articles-by-date-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="what-words-are-most-often-associated-with-each-president" class="section level3">
+<h3>What words are most often associated with each president</h3>
+<p>It’s great to see how often the president’s are written about, but it seems more important to check if the substance of the writing is any different. Using tidytext we can break down the articles by word to see what words are used when writing about each president.</p>
+<pre class="r"><code># tokenize the articles and eliminate stop words
+df_words &lt;- df%&gt;%
+  unnest_tokens(word, body)%&gt;%
+  filter(str_detect(word, &quot;[a-z&#39;]$&quot;),
+         !word %in% stop_words$word)
+
+# Count of word usage for each president. Add a variable for the total word count by president
+tag_words &lt;- df_words %&gt;%
+  count(tag, word, sort = TRUE)
+total_words &lt;- tag_words %&gt;%
+  group_by(tag)%&gt;%
+  summarise(total = sum(n))
+tag_words &lt;- left_join(tag_words, total_words)
+
+# Calculate the tf-idf of each word
+tag_words &lt;- tag_words%&gt;%
+  bind_tf_idf(word, tag, n)</code></pre>
+<p>Here we’ve gone ahead and tokenized the data set and removed stop words. Then, we can calculate the tf-idf (term frequency - inverse document frequency) for each word in the data set. Tf-idf scores measure how important a word is to–in this case–a particular president. So the highest tf-idf words for Trump would be those words that appear more often in articles about Trump than they do in the overall set of articles. Looking at the visualization in Fig. 2 should help to clarify.</p>
+<pre class="r"><code># removing some custom stop words. Mainly html tags that got through the initial filtering
+custom_stop &lt;- c(&#39;theguardian.com&#39;, &#39;pic.twitter.com&#39;, &#39;t.co&#39;, &#39;https&#39;, &#39;ll&#39;, &#39;nbsp&#39;,
+                 &#39;mdash&#39;, &#39;alt&#39;, &#39;quot&#39;)
+p &lt;- tag_words %&gt;%
+  filter(!word %in% custom_stop)%&gt;%
+  group_by(tag)%&gt;%
+  top_n(15, tf_idf)%&gt;%
+  ungroup()%&gt;%
+  arrange(tag, tf_idf)%&gt;%
+  mutate(order = row_number())
+
+ggplot(p, aes(order, tf_idf, fill = tag))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~ tag, scales = &#39;free&#39;)+
+  scale_x_continuous(
+    breaks = p$order,
+    labels = p$word,
+    expand = c(0,0)
+  ) +
+  coord_flip()+
+  theme_bw()+
+  theme(
+    strip.background = element_rect(fill = &#39;white&#39;)
+    )+
+  labs(x = &quot;&quot;,
+       y = &quot;Highest Tf-Idf Words by President&quot;,
+       title = &quot;Most Important Words in Articles Written about the President&quot;)+
+  scale_y_continuous(labels=function(n) sprintf(&quot;%.4f&quot;, n))</code></pre>
+<p><img src="/post/2018-03-14-text-analysis-of-presidential-news-articles_files/figure-html/tf-idf-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>Right away we see that names dominate this plot. For instance, words unique to Bush were <em>powell</em>, <em>rumsfield</em>, and <em>laden</em>–his secretary of state, secretary of defense and the mastermind behind the 9/11 attacks . It makes perfect sense that these words would appear frequently in articles about Bush from that time period. And just as importantly, these words didn’t appear very often outside of Bush articles. We can see similar ideas with the other presidents. Jinping came to power in 2013, right around the time of Edward Snowden and the NSA leaks. Snowden initially took refuge in Hong Kong so naturally China and President Jinping were closely associated with him in the news.</p>
+<p>Trump follows this general trend. Macron is the french president and came to power at a similar time as Trump. Given that our countries are allies, it makes a lot of sense for the presidents to be linked in news articles. One minor difference is the relative prevalence of events compared to the other presidents. <em>Brexit</em>, <em>irma</em>, <em>hurricane</em>, <em>charlottesville</em>, etc all refer to specific events–Britain’s exit from the EU, Hurricane Irma making landfall and the protests in Charlottesville, NC. All told, 8 of the top 15 tf-idf words for Trump pertaining to specific events. This is far greater than the 1 event listed in Obama’s top 15 words.</p>
+<p>It’s really just speculation as to why this is the case. It could be that the events mentioned in Trump articles were such seismic events that they overshadowed everything else. I find this unlikely since Bush’s presidency was in large part dominated by 9/11 and the war, yet we don’t see a mention of 9/11 in his top words. It could also be that Trump tends to inject himself into whatever event is trending on twitter and so the reporting ends up being about his <em>view</em> on events, rather than policy or dealmaking with other people. Again, this is pure speculation. It could just be that The Guardian is more focused on churning out event stories and Trump’s name get’s mentioned because it draws views. Who really knows?</p>
+</div>
+<div id="sentiment-analysis" class="section level3">
+<h3>Sentiment Analysis</h3>
+<p>A next step is to take these words and perform sentiment analysis. Broadly speaking, sentiment analysis takes individual words and scores them based on a predefined <em>sentiment</em> determination. There are a number of different sentiment dictionaries, but here we’ll be using on called the AFINN lexicon which scores each word numerically -5 to 5. We can then take those individual word scores and aggregate them to determine the sentiment of individual articles or the sentiment of all articles published in a specific day/week/month. As you can imagine, this can be quite useful.</p>
+<p>First, we should see if perhaps the overall sentiment when writing about Trump is lower. There’s several ways to think about this though. Should we take all the words in articles about each president and calculate an overall sentiment score on that bag of words? Or maybe we should weight that score by the number of times each of those words occurs? We could also take a slightly different approach and see what the average sentiment is for an article about each president. An argument could be made for any of these approaches, but we’re going to go with calculating the average sentiment for an article written about the president.</p>
+<pre class="r"><code># calculates per article sentiment per president and then takes the average of those sentiments
+by_article_sent &lt;- df_words%&gt;%
+  # initial word count - needs grouping by president tag and article id
+  count(tag, id, word, sort = TRUE)%&gt;%
+  # have to undo this grouping
+  ungroup()%&gt;%
+  # join sentiments data frame keeping only those words that appear in afinn sentiments df
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  # now I want to calculate the avg sentiment per article, but I need to keep the tag variable for later use
+  # so I keep that too
+  group_by(tag, id)%&gt;%
+  # This avg is weighted by the # of occurences of the words-- so words like war that are very negative and 
+  # occur a lot end up having a ton of influence on the outcome
+  summarise(avg = mean(score*n))%&gt;%
+  # Now I get rid of the per article grouping and just group by president tag.
+  ungroup()%&gt;%
+  group_by(tag)%&gt;%
+  # Now everythings setup to take the average of the article sentiment for each president
+  summarise(`article average` = mean(avg))%&gt;%
+  rename(president = tag)
+
+knitr::kable(by_article_sent)</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">president</th>
+<th align="right">article average</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Bush</td>
+<td align="right">-0.7665995</td>
+</tr>
+<tr class="even">
+<td align="left">Jinping</td>
+<td align="right">-0.4482531</td>
+</tr>
+<tr class="odd">
+<td align="left">Obama</td>
+<td align="right">-0.5423316</td>
+</tr>
+<tr class="even">
+<td align="left">Trump</td>
+<td align="right">-0.5835253</td>
+</tr>
+</tbody>
+</table>
+<p>I would have guessed that Trump’s articles would have the lowest sentiment scores, but apparently the worst terrorist attack in US history will result in a lot of negative articles. Trump does have a much lower average sentiment than Jinping – though that seems like it’s more related to how The Guardian writes about China versus the US– and a marginally lower average sentiment than Obama. We can see what is contributing the most towards these sentiment scores pretty easily with the code below.</p>
+<pre class="r"><code>contributions &lt;- df_words %&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  group_by(tag, word)%&gt;%
+  # groups by president and word and calculates the sum--amounts to how much each word contributes
+  # for each president
+  summarise(occurences = n(),
+            contribution = sum(score))%&gt;%
+  top_n(10, abs(contribution))%&gt;%
+  ungroup()%&gt;%
+  arrange(tag, contribution)%&gt;%
+  mutate(order = row_number())
+
+
+ggplot(contributions, aes(order, contribution, fill = contribution &gt; 0))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~tag, scales = &#39;free&#39;)+
+  scale_x_continuous(
+    breaks = contributions$order,
+    labels = contributions$word,
+    expand = c(0,0)
+  )+
+  xlab(&quot;&quot;)+
+  coord_flip()+
+  theme_bw()+
+  theme(
+    strip.background = element_rect(fill = &#39;white&#39;)
+  )+
+  ylab(&quot;Word Contribution toward Sentiment&quot;)+
+  theme(
+    axis.title = element_text(family = &#39;sans&#39;) 
+  )</code></pre>
+<p><img src="/post/2018-03-14-text-analysis-of-presidential-news-articles_files/figure-html/article-sentiment-contributions-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>Given what we’ve seen so far, it makes perfect sense that Bush’s sentiment score is being driven by the war. Note that the x-axis for each of these plots is different, so while the contributions might appear similar, Bush’s war sentiment skews the whole chart. Writing about Bush references war so much more often that it contributes over 2x more negative sentiment to his average score than it does for Trump–even though it’s the greatest negative contributor for every president! Nothing really stands out in these lists of words though.</p>
+<p>Perhaps it’s an instance where the sentiment of the writing has changed over time. We can use the <strong>round_date</strong> function from <em>lubridate</em> to group our data by week. Then we just take the mean and we can plot how weekly sentiment has looked over the presidencies.</p>
+<pre class="r"><code>df_words%&gt;%
+  select(-id)%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  group_by(weekly = round_date(date, &#39;week&#39;), tag)%&gt;%
+  summarise(sentiment = mean(score),
+            words = n())%&gt;%
+  ggplot(aes(weekly, sentiment))+
+  geom_line()+
+  geom_smooth()+
+  geom_vline(xintercept = as.numeric(as.Date(&#39;2001-09-11&#39;)), color = &#39;red&#39;, linetype = 2)+
+  geom_vline(xintercept = as.numeric(as.Date(&#39;2017-08-11&#39;)), color = &#39;red&#39;, linetype = 2)+
+  geom_vline(xintercept = as.numeric(as.Date(&#39;2018-02-14&#39;)), color = &#39;red&#39;, linetype = 2)+
+  facet_wrap(~tag, scales = &#39;free_x&#39;)+
+  scale_x_date(labels = function(x) format(x, &quot;%b-%Y&quot;), expand = c(0.1, 0))+
+  geom_hline(color = &#39;blue&#39;, lty = 2, yintercept = 0)+
+  labs(x = &quot;&quot;,
+       y = &quot;&quot;,
+       title = &quot;Average Weekly Sentiment by President&quot;)+
+  theme_bw()+
+  theme(
+    strip.background = element_rect(fill = &#39;white&#39;)
+  )</code></pre>
+<p><img src="/post/2018-03-14-text-analysis-of-presidential-news-articles_files/figure-html/sentiment-by-week-1.png" width="672" style="display: block; margin: auto;" /> So on an average week, presidential sentiment is generally negative. If the black sentiment line is below the dotted blue line (indicating neutral sentiment) then average sentiment was negative. If it’s above the dotted blue lines, sentiment was positive. We can see it’s almost always negative. Bush had negative sentiment leading up to 9/11 and sentiment stayed low or even decreased over the rest of this time period. Jinping is interesting in that he is the only president to have remotely positive sentiment. This lends more evidence to the fact that British reporting about China is fundamentally different in addition to be less frequent.</p>
+<p>Obama and Trump chart pretty similarly though. Obama actually has some positive sentiment weeks, but he also dips low more frequently. Overall, their trend lines (indicated by the solid blue lines) are quite similar. It’s interesting to note that major events in Trump’s presidency haven’t really coincided with dips in sentiment. The two red lines–indicating the Charlottesville protests and the Florida school massacre respectively–show a mixed bag of results. While the Charlottesville race riots seem to be associated with a drop in sentiment, the Florida school shooting was followed by a minor bump.</p>
+<p>Overall, I think this sentiment analysis is pretty interesting. If you are president, on average writing about you is going to be pretty negative. You are trying to avoid war, violence and crises and often times that fails. It’s a good reminder that a president’s job is difficult and decisions they make can cost lives, jobs or–somewhat rarely–promote peace.</p>
+</div>
+<div id="bigram-analysis" class="section level3">
+<h3>Bigram Analysis</h3>
+<p>As a next step, we are going to look at bigrams pairs. Instead of looking at single words, we can look at occurrences of phrases such as “trump said” or “obama spoke”. With the data in this format, we can see which sorts of words are more likely to occur after “trump” than after “obama”. This could give us a better sense of whether the media writes differently about Trump and Obama.</p>
+<p>Tidytext allows you to tokenize data into just about any form you want, including n-grams. You can actually get really fancy and do 4 and 5 gram analysis, but the memory and time requirements grow exponentially so proceed with caution. Below we create our bigrams (here we’ve actually done this in advance and loaded the data into R).</p>
+<pre class="r"><code># load in the saved data
+# bigrams &lt;- df%&gt;%
+#   unnest_tokens(bigram, body, token = &#39;ngrams&#39;, n = 2)
+# saveRDS(bigrams, file = &#39;news_bigrams.rds&#39;)
+bigrams &lt;- readRDS(&#39;news_bigrams.rds&#39;)</code></pre>
+<p>Now that we have our bigrams, we can do some analysis. First we want to separate the bigrams into their component words and remove any entries that have common stop words in either position. These don’t add much value to an analysis since they are so common in everyday communication. Then we can filter down to “Trump _&quot; or “Obama _&quot; within Trump and Obama tagged articles. Before you get confused about how some of the word pairings don’t make grammatical sense, we combined the regular and possessive versions of their names(ie Trump and Trump’s). There didn’t seem to be any meaningful difference in word pairs between the two and it had the benefit of giving us a larger data set of words.</p>
+<p>The real work comes next as we count the word occurrences, spread them out to a wide format and then calculate the log ratio. This log ratio indicates the difference in a words usage after “Obama” compared to “Trump”. A large log ratio indicates the word use is skewed towards Obama, while a small ratio indicates skew towards Trump.</p>
+<pre class="r"><code>#Cleaned up some residual messiness in the data--several contractions got broken
+#apart, so I just put them back together
+apos &lt;- c(&quot;hasn&quot;, &quot;hadn&quot;, &quot;doesn&quot;, &quot;didn&quot;, &quot;isn&quot;, &quot;wasn&quot;, &quot;couldn&quot;, &quot;wouldn&quot;)
+bigram_sep &lt;- bigrams%&gt;%
+  select(-id)%&gt;%
+  separate(bigram, c(&#39;word1&#39;, &#39;word2&#39;), sep = &quot; &quot;)%&gt;%
+  #remove bigrams that include a stop word
+  filter(!word1 %in% stop_words$word)%&gt;%
+  filter(!word2 %in% stop_words$word)%&gt;%
+  mutate(word2 = ifelse(word2 %in% apos, paste0(word2, &quot;t&quot;), word2))
+
+
+t_o_counts &lt;- bigram_sep%&gt;%
+  filter(tag == &#39;Trump&#39;|tag == &#39;Obama&#39;)%&gt;%
+  filter(word1 %in% c(&quot;trump&quot;, &quot;trump&#39;s&quot;, &quot;obama&quot;, &quot;obama&#39;s&quot;))%&gt;%
+  mutate(word1 = ifelse(word1 == &quot;trump&#39;s&quot;, &#39;trump&#39;,
+                        ifelse(word1 == &quot;obama&#39;s&quot;, &#39;obama&#39;, word1)))%&gt;%
+  count(word1, word2)%&gt;%
+  spread(word1, n, fill = 0)%&gt;%
+  mutate(total = obama + trump,
+         trump = (trump +1)/sum(trump + 1),
+         obama = (obama + 1)/sum(obama + 1),
+         log_ratio = log2(obama/trump),
+         abs_ratio = abs(log_ratio))%&gt;%
+  arrange(desc(log_ratio))
+
+t_o_counts</code></pre>
+<pre><code>## # A tibble: 1,537 x 6
+##    word2              obama    trump total log_ratio abs_ratio
+##    &lt;chr&gt;              &lt;dbl&gt;    &lt;dbl&gt; &lt;dbl&gt;     &lt;dbl&gt;     &lt;dbl&gt;
+##  1 special          0.00451 0.000219   14.      4.37      4.37
+##  2 strategy         0.00361 0.000219   11.      4.05      4.05
+##  3 administration&#39;s 0.0120  0.000875   42.      3.78      3.78
+##  4 arrives          0.00301 0.000219    9.      3.78      3.78
+##  5 speech           0.00782 0.000656   27.      3.58      3.58
+##  6 message          0.00241 0.000219    7.      3.46      3.46
+##  7 yesterday        0.00451 0.000437   15.      3.37      3.37
+##  8 decision         0.00632 0.000656   22.      3.27      3.27
+##  9 envoy            0.00211 0.000219    6.      3.27      3.27
+## 10 announcement     0.00180 0.000219    5.      3.05      3.05
+## # ... with 1,527 more rows</code></pre>
+<p>If we look at the largest positive values of the log ratio we see journalists write about Obama’s strategy, administration, speech and message. The smallest negative values indicate journalists write about Trump’s twitter handle, (Trump) tower, Putin, threatening, what he’s tweeted, and Russia. A full look at the top 12 skewed words for Obama and Trump are shown below.</p>
+<p><img src="/post/2018-03-14-text-analysis-of-presidential-news-articles_files/figure-html/n-gram-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>With a moderate amount of background knowledge about what’s going on in politics we can attempt to connect the dots about a lot of these words. Trump is known for using his twitter account for official business (hence his twitter handle and his tweeting being mentioned frequently) and these tweets are often quite belligerent towards his opponents. We see all of that in the graph. It’s also pretty easy to understand why Russia and Putin are so high up, given the ongoing election investigation.</p>
+<p>On the Obama side, things are a little tougher to pick apart, but words like speech and message are no surprise given his penchant for eloquent public speaking. On the whole it’s tougher to explain Obama’s word pair discrepancies. His words are less tied to concrete events which may itself indicate a difference in reporting. Perhaps Trump’s constant injection of himself into current events through twitter forces reporters to address his minute by minute twitter position. This could be in contrast to past presidents–Obama specifically– who were, by comparison, out of the spotlight and thus their decisions and strategies were the topic of choice rather than their opinions. Of course that is all speculative, but it’s an interesting theory at least.</p>
+</div>
+<div id="conclusions" class="section level3">
+<h3>Conclusions</h3>
+<p>Sometimes in data science you don’t end an analysis with a nice, tidy answer to your question. Unfortunately, this seems to be one of those times. While it’s definitely true that Trump is having more articles published about him than, say, Obama, we can’t say definitively that it’s any sort of record shattering rate. Substantively, aside from some differences in how many current events pop up in writing about Trump and how often his twitter is referenced, we couldn’t detect any major shifts in the writing about the presidents. My pet theory is that a lot of this is due to our data source. While The Guardian was a great source of data, I’m not sure a British newspaper accurately reflects US sentiment towards our politics. I’d love to see a similar analysis using a prominent US newspaper.</p>
+<p>Finally, this analysis got me thinking about what exactly this ‘different feeling’ about the coverage might be caused by. I don’t know that it’s true anymore that we get most of our news from the newspaper. I don’t personally seek out much content I’d consider news, but I’m still inundated by it via Google alerts, Twitter trends and Reddit. You could always examine how tweets or Reddit posts about Trump versus other presidents compare, but ultimately I don’t know if that approach would be any better. One thing’s for sure, a twitter analysis would probably yield some really amusing anecdotes as you watch people from both sides of the aisle proclaim doom and gloom.</p>
+<p>Anyway, thanks for reading. A special shout-out to <a href="http://varianceexplained.org/">David Robinson</a> and <a href="https://juliasilge.com/">Julia Silge</a>. Without their tidytext package and <a href="https://www.tidytextmining.com/">text mining</a> book, this post wouldn’t have been possible. I drew a lot of inspiration from their <a href="http://varianceexplained.org/r/tidytext-gender-plots/">gender and verbs</a> posts when doing my bigram analysis. It’s so nice to have such a great, open community to learn from!</p>
+</div>
