@@ -146,7 +146,7 @@ my analysis on the reviews and the ratings to make sure I have a good understand
 start modeling. In that spirit, what does the distribution of restaurant ratings look like?
 
 ### Overall
-```{r overall-rating-plot, fig.align = 'center'}
+```{r overall-rating-plot, fig.align = 'center', echo = FALSE}
 restaurants%>%
   #grab distinct restaurants since each restaurant is listed multiple times 
   distinct(business_id, .keep_all = TRUE)%>%
@@ -252,7 +252,7 @@ of restaurant ratings. I can explore this idea a bit more by taking a look at th
 restaurant categories and comparing to the lowest variance ones.
 
 
-```{r high-var-plot, fig.align = 'center'}
+```{r high-var-plot, fig.align = 'center', echo = FALSE}
 restaurants%>%
   group_by(categories)%>%
   mutate(total = n_distinct(business_id), var = var(stars))%>%
@@ -283,7 +283,7 @@ variance plot is actually a sample of the low variance categories because there 
 with a similar variance at the low end. Make sure you use the same seed we did if you want to replicate 
 the plot.
 
-```{r low-variance-categories, fig.align = 'center'}
+```{r low-variance-categories, fig.align = 'center', echo = FALSE}
 set.seed(1)
 restaurants%>%
   group_by(categories)%>%
@@ -409,7 +409,7 @@ for exploration.
 ### All reviews(from the sample data)
 
 So what sort of reviews are people leaving on Yelp?
-```{r individual-reviews-distribution, fig.align='center'}
+```{r individual-reviews-distribution, fig.align='center', echo = FALSE}
 sample_reviews%>%
   group_by(stars)%>%
   summarise(total = n())%>%
@@ -459,7 +459,7 @@ joined_df%>%
 These restaurants all have significantly more 1 star reviews than a typical Yelp restaurant. It's a much 
 flatter plot than, for example, this group of low variance categories shown below.
 
-```{r individual-reviews-low-var, fig.align='center'}  
+```{r individual-reviews-low-var, fig.align='center', echo = FALSE}  
 # Could just look at the same restaurants used the the original low var plot, but these aren't all
 # among the lower variance categories when viewed at the individual review level.
 
@@ -563,7 +563,9 @@ total_words_by_review%>%
   labs(x = '',
        y = '# of Words in Average Review',
        title = 'Average Yelp Review Length, by Month')
+```
 
+```{r, echo = FALSE}
 reviews_by_year<- total_words_by_review%>%
   group_by(year = floor_date(date, 'year'))%>%
   summarise(`Total Reviews` = n())
@@ -603,7 +605,9 @@ total_words_by_review%>%
   labs(x = '',
        y = '# of Words in Average Review',
        title = 'Average Yelp Review Length by Rating, by Week')
+```
 
+```{r, echo = FALSE}
 knitr::kable(avgs)
 ```
 
@@ -618,7 +622,7 @@ differences in the text of reviews between categories.  Using information I gath
 filter down to review for a couple of the highest variance (Fast Food and Chicken Wings) and a couple
 of the lowest variance(Vegan and Vegetarian) categories.
 
-```{r review-text-by-categories, fig.align='center'}
+```{r review-text-by-categories, fig.align='center', echo = FALSE}
 total_words_by_review%>%
   left_join(restaurants, by = 'business_id')%>%
   filter(categories %in% c("Fast Food", "Chicken Wings", "Vegan", "Vegetarian"))%>%
@@ -649,7 +653,7 @@ text, that's a simple task. I'm using the 'afinn' sentiment score which assigns 
 to words depending on it's predetermined sentiment level. Words like 'outstanding' receive high sentiment
 values while 'fraud' or 'shit' are scored with very low sentiment values.
 
-```{r average-sentiment-by-rating-table}
+```{r average-sentiment-by-rating-table, echo = FALSE}
 avg_sent <- word_per_review%>%
   inner_join(get_sentiments('afinn'), by = 'word')%>%
   inner_join(sample_reviews, by = 'review_id')%>%
@@ -669,7 +673,7 @@ average sentiment, while 'service' in a bad review is accompanied by a small dro
 average sentiment.
 
 
-```{r average-sentiment-service-reviews}
+```{r average-sentiment-service-reviews, echo = FALSE}
 avg_sent <- word_per_review%>%
   inner_join(get_sentiments('afinn'), by = 'word')%>%
   inner_join(sample_reviews, by = 'review_id')%>%
@@ -792,7 +796,7 @@ restaurant types, but I'll leave that as an exercise for the reader.
 For now, I can say that sentiment for Chicken Wings and Fast Food has trended down
 over the past several years while Vegan and Vegetarian may have seen a mild increase 
 in average sentiment.
-```{r sentiment-score-by-category, fig.align='center'}
+```{r sentiment-score-by-category, fig.align='center', echo = FALSE}
 word_per_review%>%
   inner_join(sample_reviews, by = 'review_id')%>%
   left_join(restaurants, by = 'business_id')%>%
@@ -881,7 +885,7 @@ resulting in their appearance in more fast food reviews.
 If there are similar identifiers in other categories then it bodes well for there being
 textual differences amongst the different restaurant categories. They may be subtle, but
 hopefully our neural network will pickup on them.
-```{r sentiment-contribution-by-category, fig.align='center'}
+```{r sentiment-contribution-by-category, fig.align='center', echo = FALSE}
 cats <- word_per_review%>%
   anti_join(stop_words)%>%
   inner_join(sample_reviews, by = 'review_id')%>%
