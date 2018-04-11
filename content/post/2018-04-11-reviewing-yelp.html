@@ -1,0 +1,827 @@
+---
+title: 'The Tables Turn: Reviewing Yelp!'
+author: Adam
+date: '2018-04-11'
+slug: reviewing-yelp
+categories:
+  - R
+  - Text Analysis
+  - Data Visualization
+tags:
+  - R
+  - Text Analysis
+  - Tidytext
+  - Visualization
+output: 
+  html_document:
+    toc: true
+    number_sections: true
+    code_folding: hide 
+---
+
+
+
+<div id="introduction" class="section level1">
+<h1>Introduction</h1>
+<p>For those who know me, it’s no secret that I love food. Whether it’s a bowl of ramen, delicious BBQ or a (half-dozen)warm cookie, if there is food to be tried, I want to try it. With that in mind, imagine how excited I was when I learned that Yelp had an enormous <a href="https://www.yelp.com/dataset/challenge">dataset</a> to play with. If you are unfamiliar, <a href="yelp.com">Yelp</a> is a website devoted to reviews of just about any sort of business you can think of – restaurants, gyms, barbers, doctors, etc. With these reviews, users of the site are able to choose establishments to visit with more confidence that their hard earned dollars are going to be well spent.</p>
+<p>The Yelp dataset, specifically, is a (seemingly) complete subset of Yelp data from selected cities in North America and Europe. It includes information about businesses and users from the selected cities as well as review, checkin, and tip data. There are also additional files with the photos people have uploaded to Yelp . To put it bluntly, it’s a lot of fucking data. All told, it’s about 15GB worth of information. Even more incredible still, it’s pretty much current data–right now it goes through the end of 2017, but they keep updating the dataset, so I’d imagine we’ll start seeing 2018 data in a couple months. I can’t overstate how exciting it is to have access to this sort of data.</p>
+<p>Finding this dataset was quite nice timing since I have been looking for a nice end to end project for a couple weeks. Over the next couple weeks, I plan on analyzing, modeling and, ultimately, building a simple web app to showcase the model. The Yelp dataset seems perfect for this– personally interesting data, a non-trivial amount of data processing, and, most importantly, a wide range of modeling topics to choose from. With all that intro, let’s take and look at the data and get started!</p>
+</div>
+<div id="problem-formulation" class="section level1">
+<h1>Problem Formulation</h1>
+<p>While there are gobs of information in this dataset, right from the start the reviews stood out to me. I think natural language processing is a fascinating area and, while I have a good handle on how things are done, I haven’t gone end-to-end with a state of the art NLP system. How lucky that I have 5 million+ text reviews at my disposal now(insert evil laughter?)</p>
+<p>The NLP field has come a long way in the past couple years. The use of recurrent neural networks(RNN) and long short-term memory networks(LSTM) to model language has generated expressive, contextually sophisticated models that can do everything from generating new context specific text to classifying comments as <a href="https://www.kaggle.com/c/jigsaw-toxic-comment-classification-challenge">toxic</a>. This got me wondering whether you can accurately classify a text review as a good or bad review. Taken one step further, can you accurately predict whether a text review is a 1-5 star review? A human will read a review and intuitively recognize the review structure, word associations and subtle features of language such as sarcasm. It’s a tall order to think you can model all of that nuance, but neural networks can create enormously rich models, so let’s give it a shot. First though, I want to explore the dataset to get a sense of what I am working with.</p>
+</div>
+<div id="initial-data-analysis" class="section level1">
+<h1>Initial Data Analysis</h1>
+<p>With such a big dataset, I want to get a feel for the data first. Let’s have a look at the business table to see how the data is structured. (Note: Initial cleaning was performed in the read_data.R script which can be found in the repo for this project. The files were all json files–with some added wrinkles–so it’s worth checking that out if you are curious.)</p>
+<pre class="r"><code>restaurants &lt;- readRDS(&#39;us_restaurants.rds&#39;)
+sample_reviews &lt;- readRDS(&#39;sample_reviews_large.rds&#39;)
+sample_reviews$date &lt;- as.POSIXct(sample_reviews$date)
+
+str(restaurants)</code></pre>
+<pre><code>## Classes &#39;tbl_df&#39;, &#39;tbl&#39; and &#39;data.frame&#39;:    97714 obs. of  10 variables:
+##  $ business_id : chr  &quot;PfOCPjBrlQAnz__NXj9h_w&quot; &quot;PfOCPjBrlQAnz__NXj9h_w&quot; &quot;PfOCPjBrlQAnz__NXj9h_w&quot; &quot;PfOCPjBrlQAnz__NXj9h_w&quot; ...
+##  $ name        : chr  &quot;Brick House Tavern + Tap&quot; &quot;Brick House Tavern + Tap&quot; &quot;Brick House Tavern + Tap&quot; &quot;Brick House Tavern + Tap&quot; ...
+##  $ neighborhood: chr  &quot;&quot; &quot;&quot; &quot;&quot; &quot;&quot; ...
+##  $ city        : chr  &quot;Cuyahoga Falls&quot; &quot;Cuyahoga Falls&quot; &quot;Cuyahoga Falls&quot; &quot;Cuyahoga Falls&quot; ...
+##  $ state       : chr  &quot;OH&quot; &quot;OH&quot; &quot;OH&quot; &quot;OH&quot; ...
+##  $ postal_code : chr  &quot;44221&quot; &quot;44221&quot; &quot;44221&quot; &quot;44221&quot; ...
+##  $ stars       : num  3.5 3.5 3.5 3.5 3.5 3.5 4.5 4.5 4.5 4.5 ...
+##  $ review_count: int  116 116 116 116 116 116 3 3 3 3 ...
+##  $ is_open     : int  1 1 1 1 1 1 0 0 0 0 ...
+##  $ categories  : chr  &quot;American (New)&quot; &quot;Nightlife&quot; &quot;Bars&quot; &quot;Sandwiches&quot; ...</code></pre>
+<pre class="r"><code># str(sample_reviews)</code></pre>
+<p>During the initial cleaning, I removed all non-US businesses and all businesses that did not have the ‘restaurant’ tag in the category section. This left about 100,000 rows of data. There are only 32,277 unique restaurants, so what are the other rows? Since almost every restaurant is tagged by multiple categories, the additional rows are duplicate rows of restaurant X to enumerate all the categories for said restaurant. Note that the restaurant filtering didn’t end up being as exclusive as I would have hoped. Many ‘restaurants’ were tagged with non-food related categories, but since they also included a restaurant tag, they’ve been included. Hingetown restaurant in Ohio, for instance, is tagged as a museum and florist as well as a restaurant.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">name</th>
+<th align="left">categories</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Hingetown</td>
+<td align="left">Shopping</td>
+</tr>
+<tr class="even">
+<td align="left">Hingetown</td>
+<td align="left">Flowers &amp; Gifts</td>
+</tr>
+<tr class="odd">
+<td align="left">Hingetown</td>
+<td align="left">Arts &amp; Entertainment</td>
+</tr>
+<tr class="even">
+<td align="left">Hingetown</td>
+<td align="left">Cafes</td>
+</tr>
+<tr class="odd">
+<td align="left">Hingetown</td>
+<td align="left">Coffee &amp; Tea</td>
+</tr>
+<tr class="even">
+<td align="left">Hingetown</td>
+<td align="left">Local Flavor</td>
+</tr>
+<tr class="odd">
+<td align="left">Hingetown</td>
+<td align="left">Museums</td>
+</tr>
+<tr class="even">
+<td align="left">Hingetown</td>
+<td align="left">Shopping Centers</td>
+</tr>
+<tr class="odd">
+<td align="left">Hingetown</td>
+<td align="left">Art Galleries</td>
+</tr>
+<tr class="even">
+<td align="left">Hingetown</td>
+<td align="left">Florists</td>
+</tr>
+<tr class="odd">
+<td align="left">Hingetown</td>
+<td align="left">Food</td>
+</tr>
+</tbody>
+</table>
+<p>There’s not a whole lot I can do here, and since Yelp is OK with this sort of classification scheme, I will be too.</p>
+<div id="how-are-restaurant-ratings-distributed" class="section level2">
+<h2>How are restaurant ratings distributed?</h2>
+<p>Since my ultimate goal is to predict restaurant ratings from the text of reviews I’m going to focus my analysis on the reviews and the ratings to make sure I have a good understanding of the data before I start modeling. In that spirit, what does the distribution of restaurant ratings look like?</p>
+<div id="overall" class="section level3">
+<h3>Overall</h3>
+<pre class="r"><code>restaurants%&gt;%
+  #grab distinct restaurants since each restaurant is listed multiple times 
+  distinct(business_id, .keep_all = TRUE)%&gt;%
+  group_by(stars)%&gt;%
+  ggplot(aes(stars))+
+  geom_histogram(fill = &#39;midnightblue&#39;,color = &#39;black&#39;, alpha = .7, bins = 9)+
+  my_theme()+
+  labs(x = &quot;Rating&quot;,
+       y = &quot;# of Restaurants&quot;,
+       title = &quot;Distribution of Yelp Restaurant Ratings&quot;, 
+       subtitle = paste0(&quot;Avg Rating: &quot;, restaurants%&gt;%distinct(business_id, .keep_all = TRUE)%&gt;%select(stars)%&gt;%summarise(avg =round(mean(stars), 2))))</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/overall-rating-plot-1.png" width="672" style="display: block; margin: auto;" /> The overall shape of the distribution is about what I expected. I imagine that most restaurants that hover around the 1-2 star range don’t stay in business very long, so they aren’t very well represented here. And even the best restaurants have off nights and off customers, so it’s not surprising that there aren’t a ton of 5 star restaurants.</p>
+</div>
+<div id="by-state" class="section level3">
+<h3>By State</h3>
+<p>Does this distribution look different state to state? If I filter out the states that only have a small number of restaurants, the distributions look pretty similar state to state. All state distributions are negatively skewed with very similar averages. Just from a first look, it doesn’t seem like you see a lot of variation in how state’s restaurants are rated.</p>
+<pre class="r"><code># From initial plots, I know many states are included that have only
+# a handful of reviews. Eliminate these from plotting since they don&#39;t
+# contain enough data to plot meaningful distributions
+df &lt;- data.frame(state = c(&quot;AZ&quot;, &quot;NC&quot;, &quot;NV&quot;, &quot;OH&quot;, &quot;PA&quot;, &quot;WI&quot;), 
+                 full = c(&quot;Arizona&quot;, &quot;North Carolina&quot;, &quot;Nevada&quot;, &quot;Ohio&quot;, &quot;Pennsylvania&quot;, &quot;Wisconsin&quot;))
+avgs &lt;- restaurants%&gt;%distinct(business_id, .keep_all = TRUE)%&gt;%group_by(state)%&gt;%select(stars)%&gt;%summarise(avg =round(mean(stars), 2))
+df &lt;- inner_join(df, avgs, by =  &#39;state&#39;)
+# Hackish way to put avg rating on plot facets
+df &lt;- bind_cols(df, 
+                pos = data.frame(y = c(2000, 750, 1500, 1000, 750, 325)))
+
+
+restaurants%&gt;%
+  # remove duplicate businesses (from the categories ennumeration)
+  distinct(business_id, .keep_all = TRUE)%&gt;%
+  filter(!(state %in% c(&#39;AK&#39;, &#39;CA&#39;, &#39;CO&#39;, &#39;IN&#39;, &#39;NY&#39;, &#39;VA&#39;, &#39;IL&#39;, &#39;SC&#39;)))%&gt;%
+  # join my avg&#39;s df to be used for facet labeling
+  inner_join(df, by = &#39;state&#39;)%&gt;%
+  group_by(full)%&gt;%
+  ggplot(aes(stars))+
+  geom_histogram(fill = &#39;midnightblue&#39;, color = &#39;black&#39;, alpha = .7, bins = 9)+
+  facet_wrap(~full, scales = &#39;free&#39;)+
+  my_theme()+
+  labs(x = &#39;Ratings&#39;,
+       y = &#39;# of Restaurants&#39;,
+       title = &#39;Distribution of Yelp Ratings by State&#39;)+
+  geom_text(data = df,
+            aes(x = -Inf, y = y, label = paste0(&quot;Avg Rating: &quot;, avg)),
+            hjust = -0.1,
+            vjust = -1,
+            size = 2.5,
+            family = &#39;AvanteGarde&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/state-ratings-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="by-category" class="section level3">
+<h3>By Category</h3>
+<p>When I look at how ratings are distributed by category, I start to see some variation. Below are the 6 most common restaurant categories and their ratings distributions. While ‘Food’ and ‘Sandwiches’ look similar to the distributions I have seen so far, ‘Fast Food’ is quite different. The skew is reversed–a majority of restaurants have 2-3 star ratings instead of 3-4– and the distribution is much wider. ‘Bars’ and ‘Nightlife’ are narrower distributions with more pronounced peaks and ‘American’ is much closer to normal than the others.</p>
+<pre class="r"><code>restaurants %&gt;%
+  group_by(categories)%&gt;%
+  mutate(n = n())%&gt;%
+  ungroup()%&gt;%
+  filter(n &gt;= quantile(n, .70))%&gt;%
+  group_by(categories)%&gt;%
+  ggplot(aes(stars))+
+  geom_histogram(fill = &#39;midnightblue&#39;, color = &#39;black&#39;, alpha = .7, bins = 9)+
+  facet_wrap(~categories, scales = &#39;free&#39;)+
+  my_theme()+
+  labs(x = &quot;Ratings&quot;,
+       y = &quot;# of Restaurants&quot;,
+       title = &quot;Distribution of Yelp Ratings for 6 \n most common restaurant categories&quot;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/categories-ratings-plot-1.png" width="672" style="display: block; margin: auto;" /></p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">categories</th>
+<th align="right">avg</th>
+<th align="right">var</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">American (Traditional)</td>
+<td align="right">3.36</td>
+<td align="right">0.50</td>
+</tr>
+<tr class="even">
+<td align="left">Bars</td>
+<td align="right">3.51</td>
+<td align="right">0.42</td>
+</tr>
+<tr class="odd">
+<td align="left">Fast Food</td>
+<td align="right">2.79</td>
+<td align="right">0.79</td>
+</tr>
+<tr class="even">
+<td align="left">Food</td>
+<td align="right">3.75</td>
+<td align="right">0.59</td>
+</tr>
+<tr class="odd">
+<td align="left">Nightlife</td>
+<td align="right">3.51</td>
+<td align="right">0.42</td>
+</tr>
+<tr class="even">
+<td align="left">Sandwiches</td>
+<td align="right">3.45</td>
+<td align="right">0.68</td>
+</tr>
+</tbody>
+</table>
+<p>The data in the table is exactly what’s visible in the plot. ‘Fast food’ has a lower average rating with the highest variance and ‘Bars’ and ‘Nightlife’ have the lowest variance of all the categories included. Variance in data is a good thing here as it indicates restaurant categories are a useful predictor of restaurant ratings. I can explore this idea a bit more by taking a look at the highest variance restaurant categories and comparing to the lowest variance ones.</p>
+<pre class="r"><code>restaurants%&gt;%
+  group_by(categories)%&gt;%
+  mutate(total = n_distinct(business_id), var = var(stars))%&gt;%
+  ungroup()%&gt;%
+  # Filters to categories that have at least 50 unique restaurants
+  filter(total &gt;= 50)%&gt;%
+  # Then filters to the top 10%
+  filter(var &gt;= quantile(var, .9))%&gt;%
+  group_by(categories)%&gt;%
+  ggplot(aes(stars))+
+  geom_histogram(fill = &#39;midnightblue&#39;, color = &#39;black&#39;, alpha = .7, bins = 9)+
+  facet_wrap(~categories, scales = &#39;free_y&#39;)+
+  my_theme()+
+  labs(x = &#39;Ratings&#39;,
+       y = &#39;# of Restaurants&#39;,
+       title = &#39;Distribution of Yelp Ratings for highest \n variance restaurant categories&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/high-var-plot-1.png" width="672" style="display: block; margin: auto;" /> Notice that automotive is high variance, but the number of restaurants with the automotive tag is very low, so it’s very possible that this distribution doesn’t have enough data to be trustworthy. The others make sense though– at least in my opinion. Aside from automotive, these are all fast, casual food types where you can see a wide variety of customers and a wide variety of quality. A good burger to one person is awful to another just because of the peculiarities of taste.</p>
+<p>Conversely, if I look at low variance categories I see they tend to be more niche. My guess is that the clientele at these sort of restaurants knows, generally, what to expect, and so they are less often ‘surprised’ (in both good and bad ways) by the food. That’s just speculation though, so who knows. Note: the low variance plot is actually a sample of the low variance categories because there are ~30 categories with a similar variance at the low end. Make sure you use the same seed we did if you want to replicate the plot.</p>
+<pre class="r"><code>set.seed(1)
+restaurants%&gt;%
+  group_by(categories)%&gt;%
+  mutate(total = n_distinct(business_id), var = var(stars))%&gt;%
+  ungroup()%&gt;%
+  filter(total &gt;= 50)%&gt;%
+  filter(var &lt; quantile(var, .1))%&gt;%
+  group_by(categories)%&gt;%
+  ungroup()%&gt;%
+  filter(categories %in% sample(categories, size = 6))%&gt;%
+  group_by(categories)%&gt;%
+  ggplot(aes(stars))+
+  geom_histogram(fill = &#39;midnightblue&#39;, color = &#39;black&#39;, alpha = .7, bins = 9)+
+  facet_wrap(~categories, scales = &#39;free_y&#39;)+
+  my_theme()+
+  labs(x = &quot;Ratings&quot;,
+       y = &#39;# of Restaurants&#39;,
+       title = &#39;Distribution of Yelp Ratings for lowest \n variance restaurant categories&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/low-variance-categories-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>This variation by category makes some intuitive sense and is something that could be included in a standard regression sort of ratings prediction algorithm. I probably won’t extend the NLP based predictions to include outside variables such as categories, but it could be done and is something that should certainly be looked at if you were looking to really fine tune your model. For now, it’s enough to say that there is a relationship between restaurant category and restaurant rating.</p>
+</div>
+<div id="alternative-plot-for-categories" class="section level3">
+<h3>Alternative plot for Categories</h3>
+<p>While viewing the distribution this way is informative, ultimately I’m using the overall rating for all restaurants of category X to build the plots. I actually have <em>individual review</em> level data though, so I should take advantage of it. I can gather up the many thousands of reviews about, for instance, Chinese restaurants and use those to display the breakdown of each categories reviews. This will give a nice tidy view of how reviews of each restaurant category vary.</p>
+<p>There are over 600 unique categories, so first I have to find the most common categories and filter down the dataset. Here I choose categories in the top 72%(because that made the prettiest plot!), but you could play around with any number to make a plot to your liking. From there, it’s just a matter of grouping the restaurants by category and rating to get review totals and then using that information to calculate averages for each category. Simple, right?</p>
+<p>The final plot below is ordered by average category rating–the top category has the highest average rating and the bottom the lowest. You can see from this the higher the average rating, the higher the proportion of 4 and 5 star reviews. This is something that intuitively we know, but the plot hammers home the point.</p>
+<pre class="r"><code># Select a color palette for the plot
+colors = c(brewer.pal(9, &#39;PuBu&#39;)[c(5, 6, 7, 8, 9)])
+
+# I need information from both df&#39;s so I join them on business_id
+joined_df &lt;- inner_join(restaurants, sample_reviews, by = &#39;business_id&#39;)
+
+
+t &lt;- joined_df %&gt;%
+  # Group by category and sum the # of unique restaurants of each category
+  group_by(categories)%&gt;%
+  mutate(t = n_distinct(business_id))%&gt;%
+  # Need to ungroup to filter down to the top 3/4&#39;s of the restaurants
+  ungroup()%&gt;%
+  filter(t &gt;= quantile(t, .28))%&gt;%
+  # Now we regroup by category and star so we can calculate the total number
+  # of reviews category X had for 1, 2, 3, etc stars
+  # Looks as follows eg:
+    # Chinese: 1 star, 1234 reviews
+    # Chinese: 2 star, 1494 reviews
+    # Chinese: 3 star, 2003 reviews
+    # Chinese: 4 star, 2500 reviews
+    # Chinese: 5 star, 750 reviews
+  group_by(categories, stars.y)%&gt;%
+  summarise(count = n())%&gt;%
+  # redo grouping by just category
+  ungroup()%&gt;%
+  group_by(categories)%&gt;%
+  # grab the avg rating for each category NOTE this way sucks, I need a better way to do it
+  mutate(working = stars.y*count, avg = sum(working)/sum(count))%&gt;%
+  # clean up df
+  select(-working)%&gt;%
+  # sort by categorey and rating
+  arrange(categories, stars.y)
+
+# Use the df created above to get a ranking of the categories by avg rating
+# This is used to order the categories in the final plot
+rankings &lt;- t %&gt;%
+  distinct(categories, .keep_all = TRUE)%&gt;%
+  select(categories, avg)%&gt;%
+  arrange(desc(avg))
+
+# Reorder categories by avg so that you get the cascade effect seen in the final plot
+t$categories &lt;- factor(t$categories, levels = rev(rankings$categories))
+
+# actual plotting
+ggplot(t, aes(x = categories, y = count, fill = as.factor(stars.y)))+
+  geom_bar(stat = &#39;identity&#39;, position = &#39;fill&#39;, alpha = .8)+
+  coord_flip()+
+  # this percent labeling requires scales package
+  scale_y_continuous(labels = percent)+
+  my_theme()+
+  theme(legend.title = element_blank(),
+        legend.position=&quot;top&quot;,
+        legend.direction=&quot;horizontal&quot;,
+        legend.key.width=unit(0.75, &quot;cm&quot;),
+        legend.key.height=unit(0.1, &quot;cm&quot;),
+        legend.margin=margin(0, 0, -0.1, -2, &quot;cm&quot;))+
+  scale_fill_manual(values=colors, labels = c(&quot;1 Star&quot;, &quot;2 Star&quot;, &quot;3 Star&quot;, &quot;4 Star&quot;, &quot;5 Star&quot;))+
+  labs(y = &#39;Proportion of Reviews&#39;,
+       x = &#39;&#39;, 
+       title = &#39;Yelp Reviews by Restaurant Category&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/reviews-by-category-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="how-are-individual-reviews-distributed" class="section level2">
+<h2>How are individual reviews distributed?</h2>
+<p>An important thing to keep in mind about the analysis from section 3.1 is that, for the most part, I am looking at restaurant level aggregation. So, for example, restaurant Foo had 2 one star reviews, 1 four star review and 2 five star reviews for an overall rating of 3.2 stars. This is great for looking at how the industry as a whole is ordered, but I’m going to be looking at individual level reviews when I build my model. I can’t tell much of anything about how reviews look at the individual level by examining them in their aggregated form. Luckily, I also have individual review level data to play with. There were ~5m reviews in the original dataset, about half of which were restaurants of some sort. That’s a pretty hefty size corpus to manage, so I randomly sampled about a 1/10th of the dataset to use for exploration.</p>
+<div id="all-reviewsfrom-the-sample-data" class="section level3">
+<h3>All reviews(from the sample data)</h3>
+<p>So what sort of reviews are people leaving on Yelp?</p>
+<pre class="r"><code>sample_reviews%&gt;%
+  group_by(stars)%&gt;%
+  summarise(total = n())%&gt;%
+  ggplot(aes(stars, total))+
+  geom_col(fill = &#39;firebrick4&#39;, color = &#39;black&#39;, alpha = .7)+
+  my_theme()+
+  labs(x = &#39;Ratings&#39;,
+       y = &#39;# of Reviews&#39;,
+       title = &#39;Number of Yelp Reviews, by Star Rating&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/individual-reviews-distribution-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>Interesting! People are actually more likely to leave good reviews, especially 5 star ones. If I think back to the overall distribution in 3.1.1 I can imagine how this glut of 4 and 5 stars reviews is moderated by the 1 star reviews to bring the average restaurant level review down to about 3.5. Just mulling over how I imagine people use Yelp, I’d imagine you see so many good reviews because a good restaurant experience is something people are excited about and probably motivated to share. A mediocre experience isn’t something–at least personally–that people are as compelled to post like a really good or bad review.</p>
+</div>
+<div id="revisiting-variance-but-on-the-individual-review-level" class="section level3">
+<h3>Revisiting variance, but on the individual review level</h3>
+<p>Before, we saw that certain types of restaurants had a lot more variation in their overall ratings than others. Does this hold true when we start to dig down into the individual review level? If I extract the highest variance categories on the individual review level and plot them I see some old friends from our distribution plots in 3.1.</p>
+<pre class="r"><code>joined_df%&gt;%
+  # Could use this filtering to get the exact columns as before, but they aren&#39;t strictly the highest variance at this level.
+  # filter(categories %in% c(&quot;Burgers&quot;, &quot;Chicken Shop&quot;, &quot;Chicken Wings&quot;, &quot;Fast Food&quot;, &quot;Hot Dogs&quot;, &quot;Donuts&quot;))%&gt;%
+  group_by(categories)%&gt;%
+  mutate(total = n_distinct(review_id), var = var(stars.y))%&gt;%
+  ungroup()%&gt;%
+  # Had to play around with the # of reviews to filter on here. Could be changed
+  filter(total &gt;= 250)%&gt;%
+  filter(var &gt;= quantile(var, .97))%&gt;%
+  group_by(categories, stars.y)%&gt;%
+  summarise(total = n())%&gt;%
+  ggplot(aes(stars.y, total))+
+  geom_col(fill = &#39;firebrick4&#39;, color = &#39;black&#39;, alpha = .7)+
+  facet_wrap(~categories, scales = &#39;free&#39;)+
+  my_theme()+
+  labs(x = &#39;Ratings&#39;,
+       y = &#39;# of Reviews&#39;,
+       title = &#39;Yelp Ratings for Restaurant Types with \n High Variance&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/individual-reviews-high-var-1.png" width="672" style="display: block; margin: auto;" /> These restaurants all have significantly more 1 star reviews than a typical Yelp restaurant. It’s a much flatter plot than, for example, this group of low variance categories shown below.</p>
+<pre class="r"><code># Could just look at the same restaurants used the the original low var plot, but these aren&#39;t all
+# among the lower variance categories when viewed at the individual review level.
+
+# joined_df%&gt;%
+#   filter(categories %in% c(&quot;Gluten-Free&quot;, &quot;Peruvian&quot;, &quot;Pubs&quot;, &quot;Sushi Bars&quot;, &quot;Tapas/Small Plates&quot;, &quot;Vegan&quot;))%&gt;%
+#   group_by(categories, stars.y)%&gt;%
+#   summarise(total = n())%&gt;%
+#   ggplot(aes(stars.y, total))+
+#   geom_col(fill = &#39;firebrick4&#39;, color = &#39;black&#39;, alpha = .7)+
+#   facet_wrap(~categories, scales = &#39;free&#39;)+
+#   my_theme()+
+#   labs(x = &quot;Ratings&quot;,
+#        y = &quot;# of Reviews&quot;,
+#        title = &#39;Distribution of Individual Yelp Reviews from \n Low Variance Restaurant Categories&#39;)
+
+
+set.seed(1)
+joined_df%&gt;%
+  group_by(categories)%&gt;%
+  mutate(total = n_distinct(review_id), var = var(stars.y))%&gt;%
+  ungroup()%&gt;%
+  filter(total &gt;= 500)%&gt;%
+  filter(var &lt; quantile(var, .1))%&gt;%
+  filter(categories %in% sample(categories, size = 6))%&gt;%
+  group_by(categories, stars.y)%&gt;%
+  summarise(total = n())%&gt;%
+  ggplot(aes(stars.y, total))+
+  geom_col(fill = &#39;firebrick4&#39;, color = &#39;black&#39;, alpha = .7)+
+  facet_wrap(~categories, scales = &#39;free&#39;)+
+  my_theme()+
+  labs(x = &quot;Ratings&quot;,
+       y = &quot;# of Reviews&quot;,
+       title = &#39;Yelp Ratings for Restaurant Types with \n Low Variance&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/individual-reviews-low-var-1.png" width="672" style="display: block; margin: auto;" /> This reinforces the relationship discovered above between restaurant category and rating. We see it on both the restaurant and individual review level. This is definitely a feature I’d want to include in a more standard, tabular data sort of supervised model. I’m curious whether the text in the reviews of these various categories differs to a degree that we can observe. Further still, are these categories so different that a text based model will perform at different levels on different categories. Or to clarify by example–it’s commonly known that many facial recognition neural networks are significantly less accurate when trying to identify members of ethnic minority classes. Am I going to see similar issues when dealing with minority restaurant categories since they appear to behave differently in the way they are reviewed? Let’s look into the review text itself to see if we can gather some more insight.</p>
+</div>
+</div>
+</div>
+<div id="initial-text-exploration" class="section level1">
+<h1>Initial Text Exploration</h1>
+<p>Now that I have a basic idea how the reviews are distributed, I am going to take a brief look at the text of the reviews. First, I need to tokenize the text of the reviews. This will break the blocks of text into components. I can do this in many different ways – individual word, bigram, ngram, character, etc–and regardless of how I choose to do it, <a href="https://cran.r-project.org/web/packages/tidytext/index.html">tidytext</a> makes this process really seamless.</p>
+<p>After tokenizing the review text, there’s almost no end to how I can analyse the text. Just offhand, I could:</p>
+<ul>
+<li>Explore review length and how it varies by category/state/date/etc.</li>
+<li>Look at measures of sentiment across numerous axes.</li>
+<li>Examine review structure by tagging parts of speech.</li>
+<li>Model topics in a whole host of ways–from older techniques such as Linear Discriminant Analysis(LDA) to state of the art such as <a href="https://arxiv.org/abs/1506.08422">topic2vec</a>.</li>
+</ul>
+<p>I’ll briefly explore a few avenues to more fully understand the data, but encourage those reading to explore further on their own and <a href="https://twitter.com/Adam_Houl">share</a>.</p>
+<div id="overall-review-length" class="section level2">
+<h2>Overall Review Length</h2>
+<p>A simple, but important, first look is seeing how long these reviews are. Are these quick 10 word ditties or 5000 word NYT-esque behemoths? This could completely change how I’d have to go about representing the review text when I build the model.</p>
+<pre class="r"><code># Tokenize review text
+# all_tokens &lt;- sample_reviews%&gt;%
+#   unnest_tokens(word, text)
+# 
+# Count up how many times each word is used in each review
+# word_per_review &lt;- all_tokens%&gt;%
+#   count(review_id, word, sort = TRUE)
+
+# Save data and load it in to save time
+# TODO Make sure this works when uploading to kernel
+# saveRDS(word_per_review, file = &#39;review_words.rds&#39;)
+word_per_review &lt;- readRDS(&#39;review_words.rds&#39;)
+
+
+# Count total # of words used in a review and then add the date back
+total_words_by_review &lt;- word_per_review%&gt;%
+  group_by(review_id)%&gt;%
+  summarise(total = sum(n))%&gt;%
+  inner_join(sample_reviews, by = &#39;review_id&#39;)
+
+avg &lt;- total_words_by_review%&gt;%summarise(avg = mean(total))
+
+# see how many words are in reviews over time
+total_words_by_review%&gt;%
+  group_by(monthly = floor_date(date, &#39;monthly&#39;), stars)%&gt;%
+  summarise(avg_len = mean(total))%&gt;%
+  ggplot(aes(monthly, avg_len))+
+  geom_line()+
+  stat_smooth(size = .3, color = &#39;red&#39;)+
+  my_theme()+
+  labs(x = &#39;&#39;,
+       y = &#39;# of Words in Average Review&#39;,
+       title = &#39;Average Yelp Review Length, by Month&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/tokenize-review-text-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>reviews_by_year&lt;- total_words_by_review%&gt;%
+  group_by(year = floor_date(date, &#39;year&#39;))%&gt;%
+  summarise(`Total Reviews` = n())</code></pre>
+<p>What’s going on with that mass of messy data from ~2005 to 2008? Well, Yelp was founded around the end of 2004 and, at first glance at least, the initial review length appears quite different from the current trend and <em>significantly</em> more varied. However, there were significantly fewer reviews starting out (obviously, since the company wasn’t as well known) and it took Yelp many years to stabilize to it’s current levels. Looking at the table below, we don’t really start to see a substantial number of reviews until 2009.</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Year</th>
+<th align="right">Total Reviews</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">2004-01-01</td>
+<td align="right">2</td>
+</tr>
+<tr class="even">
+<td align="left">2005-01-01</td>
+<td align="right">54</td>
+</tr>
+<tr class="odd">
+<td align="left">2006-01-01</td>
+<td align="right">319</td>
+</tr>
+<tr class="even">
+<td align="left">2007-01-01</td>
+<td align="right">1220</td>
+</tr>
+<tr class="odd">
+<td align="left">2008-01-01</td>
+<td align="right">2904</td>
+</tr>
+<tr class="even">
+<td align="left">2009-01-01</td>
+<td align="right">5115</td>
+</tr>
+<tr class="odd">
+<td align="left">2010-01-01</td>
+<td align="right">9194</td>
+</tr>
+<tr class="even">
+<td align="left">2011-01-01</td>
+<td align="right">14730</td>
+</tr>
+<tr class="odd">
+<td align="left">2012-01-01</td>
+<td align="right">16944</td>
+</tr>
+<tr class="even">
+<td align="left">2013-01-01</td>
+<td align="right">22563</td>
+</tr>
+<tr class="odd">
+<td align="left">2014-01-01</td>
+<td align="right">33000</td>
+</tr>
+<tr class="even">
+<td align="left">2015-01-01</td>
+<td align="right">43328</td>
+</tr>
+<tr class="odd">
+<td align="left">2016-01-01</td>
+<td align="right">48544</td>
+</tr>
+<tr class="even">
+<td align="left">2017-01-01</td>
+<td align="right">52082</td>
+</tr>
+</tbody>
+</table>
+<p>Once the number of reviews written grows enough the data becomes more orderly. There has been a decline in the average review length over the past several years. The average review length sits at 108.31 words per review.</p>
+<div id="review-length-by-rating" class="section level3">
+<h3>Review Length By Rating</h3>
+<p>If I zoom in a bit and look at the past two years faceted by ratings, differences start to become apparent.</p>
+<pre class="r"><code>avgs &lt;- total_words_by_review%&gt;%
+  group_by(stars)%&gt;%
+  summarise(`Average word count` = round(mean(total),2))%&gt;%
+  rename(Stars = stars)
+
+total_words_by_review%&gt;%
+  filter(date &gt;=&#39;2015-12-11&#39;)%&gt;%
+  group_by(weekly = floor_date(date, &#39;weekly&#39;), stars)%&gt;%
+  summarise(avg_len = mean(total))%&gt;%
+  ggplot(aes(weekly, avg_len))+
+  geom_line()+
+  stat_smooth(size = .5, se = FALSE, color = &#39;red&#39;)+
+  my_theme()+
+  facet_wrap(~stars, scales = &#39;free&#39;)+
+  labs(x = &#39;&#39;,
+       y = &#39;# of Words in Average Review&#39;,
+       title = &#39;Average Yelp Review Length by Rating, by Week&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/text-length-by-rating-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>knitr::kable(avgs)</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="right">Stars</th>
+<th align="right">Average word count</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="right">1</td>
+<td align="right">126.56</td>
+</tr>
+<tr class="even">
+<td align="right">2</td>
+<td align="right">136.53</td>
+</tr>
+<tr class="odd">
+<td align="right">3</td>
+<td align="right">129.81</td>
+</tr>
+<tr class="even">
+<td align="right">4</td>
+<td align="right">112.72</td>
+</tr>
+<tr class="odd">
+<td align="right">5</td>
+<td align="right">86.22</td>
+</tr>
+</tbody>
+</table>
+<p>Good reviews tend to be significantly shorter and 5 star reviews are the shortest of all by a good amount. Perhaps people like to vent when they have a bad restaurant experience, but when they have a good one they are more succinct – ie “Great Food!” could be a full review for a 5 star restaurant.</p>
+</div>
+<div id="review-length-by-category" class="section level3">
+<h3>Review Length By Category</h3>
+<p>I want to briefly examine the issue discussed at the end of section 3.2.2. Am I able to discern differences in the text of reviews between categories. Using information I gathered above, I’ll filter down to review for a couple of the highest variance (Fast Food and Chicken Wings) and a couple of the lowest variance(Vegan and Vegetarian) categories.</p>
+<pre class="r"><code>total_words_by_review%&gt;%
+  left_join(restaurants, by = &#39;business_id&#39;)%&gt;%
+  filter(categories %in% c(&quot;Fast Food&quot;, &quot;Chicken Wings&quot;, &quot;Vegan&quot;, &quot;Vegetarian&quot;))%&gt;%
+  group_by(categories, stars.x)%&gt;%
+  summarise(avg_len =  mean(total))%&gt;%
+  ggplot(aes(stars.x, avg_len))+
+  geom_col(fill = &#39;seagreen&#39;, color = &#39;black&#39;, alpha = .7)+
+  geom_hline(yintercept = 100, linetype = 2)+
+  facet_wrap(~categories)+
+  my_theme()+
+  labs(x = &#39;Rating&#39;,
+       y = &#39;Average Review Length&#39;,
+       title = &#39;Average Length of Reviews for Selected Categories&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/review-text-by-categories-1.png" width="672" style="display: block; margin: auto;" /> It appears that the higher variance categories (Chicken Wings and Fast Food) tend to have shorter poor reviews than our sample low variance categories. At the high end of the ratings there isn’t much difference though. This is a good start to determining if you can tell the difference between categories by review text alone. It seems like review length could be one helpful indicator.</p>
+</div>
+</div>
+<div id="sentiment-schmentiment" class="section level2">
+<h2>Sentiment Schmentiment</h2>
+<p>Another useful avenue to explore for developing some understand of the reviews is doing some sentiment analysis. There are many flaws to sentiment analysis, but as a starting point it’s incredibly useful. For instance, maybe I am interested in seeing what the average sentiment looks like for various ratings. Since I already have tokenized text, that’s a simple task. I’m using the ‘afinn’ sentiment score which assigns a rating of -5 to 5 to words depending on it’s predetermined sentiment level. Words like ‘outstanding’ receive high sentiment values while ‘fraud’ or ‘shit’ are scored with very low sentiment values.</p>
+<pre class="r"><code>avg_sent &lt;- word_per_review%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  inner_join(sample_reviews, by = &#39;review_id&#39;)%&gt;%
+  group_by(stars)%&gt;%
+  summarise(`Average Sentiment` = round(mean(score*n),2))%&gt;%
+  rename(Stars = stars)
+
+knitr::kable(avg_sent)</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="right">Stars</th>
+<th align="right">Average Sentiment</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="right">1</td>
+<td align="right">-0.04</td>
+</tr>
+<tr class="even">
+<td align="right">2</td>
+<td align="right">0.82</td>
+</tr>
+<tr class="odd">
+<td align="right">3</td>
+<td align="right">1.51</td>
+</tr>
+<tr class="even">
+<td align="right">4</td>
+<td align="right">2.05</td>
+</tr>
+<tr class="odd">
+<td align="right">5</td>
+<td align="right">2.29</td>
+</tr>
+</tbody>
+</table>
+<p>As expected, higher ratings tend to have higher sentiment scores. But I can take this a step further– perhaps I am interested in seeing how ‘service’ being mentioned affects the average sentiment. I can filter for reviews that contain the word ‘service’ and recalculate the sentiments to get an idea of how the review changes. In this case, it looks like ‘service’ being mentioned in a good review is related to having a higher average sentiment, while ‘service’ in a bad review is accompanied by a small drop in average sentiment.</p>
+<pre class="r"><code>avg_sent &lt;- word_per_review%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  inner_join(sample_reviews, by = &#39;review_id&#39;)%&gt;%
+  filter(str_detect(text, &#39;service|Service&#39;))%&gt;%
+  group_by(stars)%&gt;%
+  summarise(`Average Sentiment` = round(mean(score*n),2))%&gt;%
+  rename(Stars = stars)
+
+knitr::kable(avg_sent)</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="right">Stars</th>
+<th align="right">Average Sentiment</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="right">1</td>
+<td align="right">-0.09</td>
+</tr>
+<tr class="even">
+<td align="right">2</td>
+<td align="right">0.79</td>
+</tr>
+<tr class="odd">
+<td align="right">3</td>
+<td align="right">1.53</td>
+</tr>
+<tr class="even">
+<td align="right">4</td>
+<td align="right">2.14</td>
+</tr>
+<tr class="odd">
+<td align="right">5</td>
+<td align="right">2.42</td>
+</tr>
+</tbody>
+</table>
+<div id="has-the-average-sentiment-of-a-review-changed-over-time" class="section level3">
+<h3>Has the Average Sentiment of a Review Changed Over Time?</h3>
+<p>One fascinating area to explore is whether reviews have become more positive or negative throughout the years. If I group the reviews by month and rating, I can examine whether, perhaps, bad reviews have gotten more extravagantly negative throughout the years.</p>
+<pre class="r"><code>word_per_review%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  inner_join(sample_reviews, by = &#39;review_id&#39;)%&gt;%
+  filter(date &gt;=&#39;2009-01-01&#39;)%&gt;%
+  group_by(monthly = floor_date(date, &#39;monthly&#39;), stars)%&gt;%
+  summarise(sentiment = mean(score), words = n())%&gt;%
+  ggplot(aes(monthly, sentiment))+
+  geom_line()+
+  geom_smooth(color = &#39;red&#39;, size = .5)+
+  facet_wrap(~stars, scales = &#39;free&#39;)+
+  my_theme()+
+  labs(x = &#39;&#39;,
+       y = &#39;Average Monthly Sentiment&#39;,
+       title = &#39;Average Sentiment of Yelp Reviews 2009-2017, by Rating&#39;,
+       subtitle = &#39;(Data Grouped by Month)&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/average-sentiment-over-time-1.png" width="672" style="display: block; margin: auto;" /> (Note: I decided to filter out reviews before 2009.) This is a pretty amazing insight. It seems that negative reviews have gotten more negative and positive reviews have gotten more positive. Interestingly, if you don’t facet this plot, the average sentiment has stayed pretty much constant since 2009. I’m a little bit suspicious of this drastic of a change in sentiment in the reviews. My gut is that the shortening length of 5 star reviews over time is giving greater emphasis to the words you’d expect in a 5 star review –amazing, fantastic, etc. So the presence of these words in shorter and shorter reviews is pushing up–or down in the case of negative words–the averages over time.</p>
+</div>
+<div id="review-length-versus-review-sentiment" class="section level3">
+<h3>Review Length versus Review Sentiment</h3>
+<p>I can explore this a tiny bit by doing a scatter plot of individual reviews with review length on the X axis and sentiment for that review on the Y axis.</p>
+<pre class="r"><code>length_sentiment &lt;- word_per_review%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  group_by(review_id)%&gt;%
+  summarise(sentiment = mean(score), words = n())%&gt;%
+  inner_join(total_words_by_review, by = &#39;review_id&#39;)
+
+length_sentiment%&gt;%
+  ggplot(aes(total, sentiment))+
+  geom_point(alpha = .1)+
+  geom_smooth(color = &#39;red&#39;, se = FALSE, size = .5)+
+  geom_hline(yintercept = 0, color = &#39;steelblue&#39;, linetype = 2)+
+  facet_wrap(~stars)+
+  my_theme()+
+  labs(x = &#39;# of Words in Review&#39;,
+       y = &#39;Review Sentiment&#39;,
+       title = &#39;Yelp Review Length vs. Review Sentiment Score&#39;,
+       subtitle = &#39;Grouped by Rating&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/review-length-by-sentiment-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p>So short reviews seem to be more hyperbolic. The shorter the review the more likely it will be scored with a very high or very low sentiment rating. That seems to fall in line with what I mentioned above about a handful of very positive or negative words carrying a ton of weight in shorter reviews.</p>
+<p>But one question you should have when looking at this plot is ‘How come 1 star and 5 star reviews both have so many high and low sentiment reviews?’ And that’s a good point. Why are we seeing low sentiment 5 star reviews at all? This is an issue with using basic sentiment analysis. ‘Feta-freaking-licious. Holy shit. That’s all I can say.’ is a 5 star review, but has a -4 sentiment score. There are several reasons for this. The ‘afinn’ sentiment dataset is relatively small and many words aren’t captured by it. This reduces the number of words that are scored, again giving more weight to those words that <em>are</em> scored. One of the words that <em>is</em> included is ‘shit’, which happens to receive a -4 score. Any human that reads this review will recognize that ‘Holy shit’ is a good exclamation in this context, but our naive sentiment scoring can’t pickup on that. This sort of sentiment analysis will also mishandle negation of words – ‘not like’ is obviously negative to us, but will be see as ‘like’ to the sentiment analysis(at least in it’s present form).</p>
+<p>And similar things happen in the negative reviews that receive high sentiment scores. ‘Would make for an outstanding buffets for dogs, raccoons or other animals.’ is obviously a negative review to humans, but all our sentiment analysis sees is ‘outstanding’. There are a number of ways you could go about strengthening this sentiment analysis–for instance, by using bi and trigrams to gather more context from each review–but I won’t deal with that here. Since my model is a completely different NLP approach I’ll just point out the limitations and gather what information I can from the sentiment analysis.</p>
+<p>Even with all that bad news about sentiment analysis, I can still use it to gain some valuable, subtle insights. I can see that shorter 4 and 5 star reviews tend to be very positive. Looking into those reviews, you see a lot of ‘Outstanding food, and some random sentence of praise here’ reviews. Short, sweet, and very positive. As we get longer reviews, it’s not that these ‘outstandings’ disappear, it’s that they are moderated by a plethora of other words in the longer review. It’s essentially a regression to the mean effect. You see that in the trend line drifting down to a slightly lower sentiment. Similar effects are seen in the 1 star reviews, but in the opposite direction. Reviews gradually trend more positive as the length of a bad review grows–all the starkly negative words are averaged out with more moderate sentiment words.</p>
+</div>
+<div id="average-sentiment-by-category" class="section level3">
+<h3>Average Sentiment by Category</h3>
+<p>Another step towards understanding the difference seen between categories is looking at the average sentiment of their reviews. Here, again, it’s obvious that sentiment of these high variance review restaurants is generally lower. Now it’s important to note that Fast Food and Chicken Wing restaurants on average receive lower ratings than Vegan and Vegetarian restaurants, so we’d have to control for this rating difference to see if this sentiment difference is real or is an artifact of the rating difference. I think this could be an instance where propensity score matching would help balance the dataset so we could more accurately examine the difference in sentiment rating between restaurant types, but I’ll leave that as an exercise for the reader.</p>
+<p>For now, I can say that sentiment for Chicken Wings and Fast Food has trended down over the past several years while Vegan and Vegetarian may have seen a mild increase in average sentiment.</p>
+<pre class="r"><code>word_per_review%&gt;%
+  inner_join(sample_reviews, by = &#39;review_id&#39;)%&gt;%
+  left_join(restaurants, by = &#39;business_id&#39;)%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  
+  filter(date &gt;= &#39;2009-01-01&#39;,
+         categories %in% c(&#39;Fast Food&#39;, &#39;Chicken Wings&#39;, &#39;Vegan&#39;, &#39;Vegetarian&#39;))%&gt;%
+  group_by(monthly = floor_date(date, &#39;monthly&#39;), categories)%&gt;%
+  summarise(sentiment = mean(score), words = n())%&gt;%
+  ggplot(aes(monthly, sentiment))+
+  geom_line()+
+  geom_hline(yintercept = 1, color = &#39;steelblue&#39;, linetype = 2)+
+  geom_smooth(color = &#39;red&#39;, size = .5)+
+  facet_wrap(~categories)+
+  my_theme()+
+  labs(x = &#39;&#39;,
+       y = &#39;Average Sentiment&#39;,
+       title = &#39;Average Monthly Sentiment for Selected Categories&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/sentiment-score-by-category-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="what-are-the-most-influential-words-in-good-vs.bad-reviews" class="section level3">
+<h3>What are the most influential words in good vs. bad reviews</h3>
+<p>One last way I will examine review sentiment is to see which words have the greatest influence on the sentiment of reviews. I’ll do this by looking at the number of times that a word occurs in a review and multiplying that by that words sentiment score.</p>
+<p>As you can see below, the contributions look quite different for each separate rating. 1 star reviews are overwhelmed by words such as bad, worst and horrible, while 5 star reviews are dominated by positive words such as amazing and love. It’s important to, again, point out that sentiment analysis by word won’t catch certain intricacies of the English language. I have a feeling if I were to look at bigrams of review text, I’d see that what actually occurs most often in 1 star reviews is ‘didn’t love’ or ‘not recommend’ rather than ‘love’ and ‘recommend’. This sort of negation is missed by word level tokenization, but could be easily captured by bigrams if you were so inclined.</p>
+<p>Still, the visualization is quite informative. You see more and more positive influence as you go from 1 to 5 star reviews, which tells me I am capturing the general idea of a review even if I am missing some details. In general, this gives me confidence that there are actual word usage differences between ratings that my model will be able to identify and use for prediction.</p>
+<pre class="r"><code>t &lt;- word_per_review%&gt;%
+  anti_join(stop_words)%&gt;%
+  inner_join(sample_reviews, by = &#39;review_id&#39;)%&gt;%
+  select(-text)%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  group_by(stars, word)%&gt;%
+  summarise(occurences = n(), contribution = sum(score))%&gt;%
+  top_n(15, abs(contribution))%&gt;%
+  ungroup()%&gt;%
+  arrange(stars, contribution)%&gt;%
+  mutate(order = row_number())
+
+
+ggplot(t, aes(order, contribution, fill = contribution &gt; 0))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~stars, scales = &#39;free&#39;)+
+  scale_x_continuous(
+    breaks = t$order,
+    labels = t$word,
+    expand = c(0,0)
+  )+
+  coord_flip()+
+  my_theme()+
+  labs(x = &#39;&#39;,
+       y = &#39;Contribution toward Sentiment&#39;,
+       title = &#39;Words with the Highest Contribution Towards Sentiment&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/sentiment-contribution-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="what-words-are-influencing-our-selected-restaurant-categories" class="section level3">
+<h3>What words are influencing our selected restaurant categories?</h3>
+<p>And finally I decided to do the same sort of sentiment contribution analysis, but focus on our selected restaurant categories. The differences aren’t as noticeable here, but some word contributions still stand out. Fast food has a lot of contribution from ‘clean’ and ‘fresh’ and ‘wrong’ while those words don’t show up in any of the other 3 categories. I imagine Fast Food reviews focus on slightly different signals than other restaurants. Since fast food is standardized across restaurants, the differentiating factors are things like the restaurant being clean, or the fries being fresh, or your order being wrong. These are all things that are taken for granted–more or less–at non-fast food restaurants and so maybe these factors rise to a higher level of importance for the fast food category, resulting in their appearance in more fast food reviews.</p>
+<p>If there are similar identifiers in other categories then it bodes well for there being textual differences amongst the different restaurant categories. They may be subtle, but hopefully our neural network will pickup on them.</p>
+<pre class="r"><code>cats &lt;- word_per_review%&gt;%
+  anti_join(stop_words)%&gt;%
+  inner_join(sample_reviews, by = &#39;review_id&#39;)%&gt;%
+  left_join(restaurants, by = &#39;business_id&#39;)%&gt;%
+  select(-text)%&gt;%
+  inner_join(get_sentiments(&#39;afinn&#39;), by = &#39;word&#39;)%&gt;%
+  filter(categories %in% c(&#39;Fast Food&#39;, &#39;Chicken Wings&#39;, &#39;Vegan&#39;, &#39;Vegetarian&#39;))%&gt;%
+  group_by(categories, word)%&gt;%
+  summarise(occurences = n(), contribution = sum(score))%&gt;%
+  top_n(15, abs(contribution))%&gt;%
+  ungroup()%&gt;%
+  arrange(categories, contribution)%&gt;%
+  mutate(order = row_number())
+
+
+ggplot(cats, aes(order, contribution, fill = contribution &gt; 0))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~categories, scales = &#39;free&#39;)+
+  scale_x_continuous(
+    breaks = cats$order,
+    labels = cats$word,
+    expand = c(0,0)
+  )+
+  coord_flip()+
+  my_theme()+
+  labs(x = &#39;&#39;,
+       y = &#39;Contribution toward Sentiment&#39;,
+       title = &#39;Words with the Highest Contribution Towards Sentiment&#39;)</code></pre>
+<p><img src="/post/2018-04-11-reviewing-yelp_files/figure-html/sentiment-contribution-by-category-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+</div>
+<div id="conclusions" class="section level1">
+<h1>Conclusions</h1>
+<p>The Yelp dataset is huge, with an enormous range of avenues to explore, but I think I was able to get a decent handle on how Yelp reviews look through this initial exploration. Review length varies a considerable amount, but very few reviews blow up in size to the point where they will have to be handled separately. There seems to be a strong relationship between the text in the review and a restaurants rating as shown by the sentiment analysis which gives me confidence that an NLP based approach to rating prediction will be successful.</p>
+<p>This exploration is by no means complete and there are certain areas–such as my complete neglection of restaurant locations and names as well as entire tables of data–ie user related info. But, one must pick and choose with a dataset like this when confronted with the realities of limited time.</p>
+<p>This initial exploration is part one of my Yelp dataset series. In part two I will build on this post and use review text to build a neural network to predict review ratings from the text of the review itself. Sounds like a fun challenge to me! Until next time.</p>
+</div>
