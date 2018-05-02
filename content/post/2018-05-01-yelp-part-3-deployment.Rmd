@@ -1,0 +1,248 @@
+---
+title: "How to deploy a Keras model? Who knows? Let's find out!"
+author: Adam
+date: '2018-05-02'
+slug: yelp-part-3-deployment
+categories:
+  - Python
+  - Machine Learning
+  - Text Analysis
+tags:
+  - Python
+  - Machine Learning
+  - Keras
+  - Dash
+---
+```{r echo = FALSE, include = FALSE}
+library(emo)
+```
+Over the past couple weeks, I've been playing around with the Yelp academic [dataset](https://www.yelp.com/dataset/challenge).
+The [first](https://www.ahoulette.com/2018/04/11/reviewing-yelp/) thing I did was explore the dataset to see what 
+interesting tidbits jumped out. I ended up focusing on the text of the individual reviews. There were 
+identifiable differences in the text of, for instance, 1 and 5 star reviews so my next step was seeing 
+if I could use this information to predict ratings. My second [post](https://www.kaggle.com/athoul01/predicting-yelp-ratings-from-review-text)
+with the Yelp dataset built a recurrent neural network that uses the text of a review to predict
+what rating that person gave the restaurant. I ended up with a model that was nearly 90% accurate. Considering
+there are 5 classes to choose from, this result made me pretty happy.
+
+My next step was inevitable--I needed to deploy this model somewhere and create a test application. This is easily the
+most intimidating step for me. I'm pretty comfortable using R to deploy Shiny apps, but otherwise, my knowledge in the
+area is really limited. I built my model in Python using Keras, so that meant I would need to deploy it within
+the Python framework. This is something I've never done before, but I've never let not knowing something stop
+me before!
+
+After a lot of research and frustration I've finally got something up and running. It's by no means pretty, but
+as a proof of concept I think it will work just fine. I'd love to hear some feedback or see some examples of 
+how people are quickly deploying Keras/tensorflow (or more generally just python models) models. I'm not particularly
+happy with how mine turned out, but I set a time limit for myself on this project and for now it will have to do. With 
+all that said, let's take a look and see how I approached deploying my Yelp app.
+
+## Frameworks, frameworks everywhere!
+
+If you are a web developer, I'd imagine that the plethora of frameworks out there is a blessing. There's Django, TurboGears,
+Flask, and CherryPy just to name a few. I don't need anything fancy here, so I initially settled on the micro framework 
+Flask. There are plenty of [posts](https://blog.keras.io/building-a-simple-keras-deep-learning-rest-api.html) out 
+there detailing how to setup a flask API for a keras model, but I would still have to deal with setting up the
+frontend of the framework. I didn't want to worry about html files or anything of the sort. Thankfully, I stumbled upon
+[Dash](https://plot.ly/products/dash/). Dash is built ontop of React and Flask and is essentially Shiny but for Python.
+It's made to be a simple framework for analytical web apps and it was, personally, the easiest system to get up and 
+running. Dash seems to be focused on deploying visualizations, but it was simple enough to deploy a machine learning
+model instead. Just keep in mind that my toy example is by no means all that Dash is capable of. You can easily use
+it to build production ready visualizations with minimal effort.
+
+## Building the app
+
+Dash allows you to get started super fast with just a single file containing everything needed to run the app locally.
+You can modularize the code just like you would with Flask, but I didn't think it was necessary and I definitely
+wanted to keep things as simple as possible.
+
+First things first, I need to import my dependencies. The Dash dependencies are just the various
+widgets necessary to build the front and back end and the documentation is pretty clear [here](https://dash.plot.ly/).
+I'll also need to import various keras components so I can load my trained neural network and preprocess new text.
+An important point here is that you need your *.h5* file containing model weights and structure from keras, but you also
+need your tokenizer that you used in training. This is saved with pickle. You can technically create a new tokenizer
+without this file, but my model predictions were totally off when I did this.
+
+
+```{python eval = FALSE, echo = TRUE, python.reticulate = FALSE}
+# Dash dependencies
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output, State
+
+#Model dependencies
+import numpy as np
+from keras.models import load_model
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+import pickle
+```
+
+Next, I instantiate the app and the server as done below.
+
+```{python eval = FALSE, echo = TRUE, python.reticulate = FALSE}
+app = dash.Dash(__name__)
+server = app.server
+```
+
+Now I need to create a couple functions that do the necessary loading and data prep.
+
+The first function, ***load_models***, reads in both the trained neural network model
+and also the tokenizer. I go ahead and load these models right away.
+
+```{python eval = FALSE, echo = TRUE, python.reticulate = FALSE}
+def load_models():
+	# Load my pre-trained Keras model
+	global model, tokenizer
+	model = load_model('yelp_nn_model.h5')
+	# load my original tokenizer used to build model
+	with open('keras_tokenizer.pickle', 'rb') as f:
+		tokenizer = pickle.load(f)
+	return model, tokenizer
+
+model, tokenizer = load_models()
+```
+
+***prepare_text*** does the preprocessing work of converting the input string into a sequence
+of numbers and then padding that sequence so it is the same length as all the others.
+
+```{python eval = FALSE, echo = TRUE, python.reticulate = FALSE}
+def prepare_text(text):
+	'''Need to Tokenize text and pad sequences'''
+	words = tokenizer.texts_to_sequences(text)
+	words_padded = pad_sequences(words, maxlen = 200)
+
+	return words_padded
+```
+
+Next comes building the front end layout for your app. This can be as simple or as complex as you want.
+You can build really pretty interactive visualizations like this Uber [graphic](https://dash-uber-rides.plot.ly/)
+or you can do something simple just to get a proof of concept up and running. I'm just setting up a couple
+markdown based descriptor lines and then a simple text input box and submit button. Ugly, but it kinda works. I know
+you all want me to design your next website! `r emo::ji('smile')`
+
+```{python eval = FALSE, echo = TRUE, python.reticulate = FALSE}
+app.layout = html.Div(children=[
+	html.H1("Restaurant Review Predictions"),	
+	html.H3("Enter the text of a restaurant review and I'll predict what I think it's star rating is!"),
+	dcc.Markdown('''For more on the model generating the predictions, visit
+	 [here](https://www.kaggle.com/athoul01/predicting-yelp-ratings-from-review-text). To learn about the data set
+	 check out my blog [post](https://www.ahoulette.com/2018/04/11/reviewing-yelp/)'''),
+	dcc.Markdown('''Powered by data from the [Yelp](https://www.yelp.com/dataset/challenge) academic data set'''),
+	dcc.Textarea(id = 'review', value = '', style={'width': '100%', 'rows': '5'}),
+	html.Button(id = 'submit-button', n_clicks = 0, children = 'Submit'),
+	html.Div(id='output-state')
+])
+```
+
+I don't know html very well at all, but setting up a basic layout is pretty easy using just a handful of 
+elements and attributes. The dash-core-components(dcc) are where you specify most of the interactivity that 
+you want to include in your app. Here I just have a big box to input text, but this is also where you'd find
+sliders, dropdown menus, etc.
+
+All that's left is to setup the interactivity in the app. I will be inputting a review as a string of text. 
+I will need to take this text, process it, feed it into my model for a prediction and then return
+the predicted rating. All this is done below.
+
+```{python eval = FALSE, echo = TRUE, python.reticulate = FALSE}
+@app.callback(Output('output-state', 'children'),
+	[Input('submit-button', 'n_clicks')],	
+	[State('review', 'value')])
+def predict_text(submit, review):
+	if review is not None and review is not '':
+		try:
+			clean_text = prepare_text([review])
+			preds = model.predict(clean_text)
+			#return 'This review sounds like a {} star review.'.format(np.argmax(preds, axis = 1)[0] + 1)
+			return 'This review sounds like a {0} star review. I am {1:.2f}% confident.'.format(np.argmax(preds, axis = 1)[0] + 1,
+				np.max(preds, axis = 1)[0]*100)
+		except ValueError as e:
+			print(e)
+			return "Unable to predict rating."
+```
+
+Dash has a special python decorator ***\@app.callback*** that handles all of this. I describe my application
+by linking the components by their id. The review text I input into the ***dcc.Textarea*** has an id of *review*.
+I want to grab the *value* of this input so I have a State object with an id of *review* that grabs that *value* property
+of that component. I can now access that review text. I use ***State*** instead of ***Input*** so that the app
+waits to predict until the whole review is entered and I click submit.
+
+This is also where I define my ***predict_text*** function that will take the review
+text and run  it through the prediction pipeline. First it 
+processes the raw data. Then it runs the predict method from the keras model on the clean text. And finally 
+it returns the predicted rating. I've also set it up to return the probability rating as a measure of
+confidence in the prediction.
+
+The last thing you need is just a call to start the app. There is some issue with tensorflow where 
+because of the way async events are handled you get an error when calling your predict functions.
+It's described in detail [here](https://github.com/keras-team/keras/issues/2397). I used the workaround
+of setting debug and threaded to False and it seemed to solve the issue. 
+
+```{python eval = FALSE, echo = TRUE, python.reticulate = FALSE}
+if __name__ == '__main__':
+	app.run_server(debug=False, threaded = False)
+```
+
+That's all the code needed to run this app locally. You can see it all in one place on my [github](https://github.com/Grollus/Yelp/blob/master/dash_app.py).
+If you want to run it, you just need to run *python dash_app.py* in the working directory.
+
+## Deploying to the public
+
+After testing locally, I finally had a working application that I was ready to deploy. Here is where
+Dash really set itself apart. I could simply follow their deployment [guide](https://dash.plot.ly/deployment)
+for heroku and be done with it. The basic steps were to:
+
+* Create a new environment and folder for all app files.
+* Set up a new git for said files.
+* Put a .gitignore, Procfile, requirements.txt file and app.py file into said folder. Procfile is basically just a one
+line file that launches your app.
+* Initialize a [heroku](heroku.com) app, add all the files to git and commit/push.
+* Voila!
+
+So good news is that it really was as easy as the guide made it out to be. I had to setup a heroku 
+account, but that was really simple. Bad news is that, well, my app is really slow and I'm not entirely sure
+why. Locally the thing runs instantly, but the heroku version is slow both to startup and when generating predictions.
+After some digging I've figured out a couple things.
+
+First, Heroku's free tier auto-sleeps an app after 30 minutes. That means that pretty much everytime someone 
+wants to access your app, it has to go through the whole boot process. In this case, that means starting up
+the tensorflow backend, loading the models and loading some pretty hefty packages. This was taking upwards of
+a minute when I was testing things out. My slug size for the deployed app was decently sized (~250MB), but that
+didn't exceed the slug softcap size of 500MB. My saved neural net alone is ~50MB, so I don't know how small
+I could even make my heroku slug.  Ultimately, I'm not sure if the free tier on heroku is the problem
+or if I need to cut the app down to size/load things more efficiently. I'd love to hear
+some suggestions.
+
+Second, the bigger problem--I think, at least--is a pesky [R14](https://devcenter.heroku.com/articles/error-codes#r14-memory-quota-exceeded)
+memory error. The free tier launches a dyno that has 512MB of memory. After monitoring my logs, I figured that my app 
+was consistently using over 600MB. Perhaps more worryingly, that number seemed to creep up. So I figure I 
+have a memory leak in there somewhere, but, again, I'm not sure.
+
+The R14 error is troublesome both for stability of my app and also for performance reasons. If the app took a while to 
+load, but then was snappy to predict I wouldn't care that much. But it can take upwards of 10 seconds to spit
+out a prediction, which is just unnacceptable. This would, obviously, never work in production. According to 
+heroku, if you exceed the memory quota, you end up using disk swap which is very slow. Ultimately, I think the predictions
+are slow for two reasons:
+
+* One, the app simply requires more than 512MB of memory. When I run things locally, the app is using about 600MB
+of memory too. I believe this means I'd need to break my app into separate components to improve performance--
+or deploy it on a more powerful tier of server.
+
+* Two, there is something in the way I've setup the app that results in a minor memory leak over time. While I
+don't think this is the primary issue at the moment, if I ever wanted to put this into production for 
+real, I'd have to run a memory profiler and see where I've gone wrong.
+
+For the time being I'm going to leave things as they are, but I'd really love to hear suggestions on how you'd 
+deploy a model like this. All the code--including the keras model-- are in this [repo](https://github.com/Grollus/Yelp)
+so it should be easy enough to try out your own deployment methods if you are interested. If you do so, just message
+me on [twitter](https://twitter.com/Adam_Houl) or leave a comment about how you did it.
+
+## Wrapup
+
+As usual with stuff like this, I've learned a ton about what I don't know! Web development definitely has a 
+lot of nuance and working with such a large technical debt makes things challenging. Luckily, I can deploy
+most of the models I build with Shiny, and for the time being Dash will work well enough anytime I need 
+to use Python. But this was good practice and will definitely help when I have to hand over a model to
+another engineer for them to deploy. For now you can visit the barebones app [here](my-reviews-app.herokuapp.com).
+Remember, I know it's slow, but if you are patient you can get some really solid review predictions from it!
