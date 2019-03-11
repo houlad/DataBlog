@@ -1,0 +1,2196 @@
+---
+title: "Analysis of Beer Advocate Reviews Dataset"
+subtitle: "Walkthrough of a data science take-home interview test"
+author: Adam
+date: '2019-03-11'
+slug: beer-advocate-reviews
+categories:
+  - R
+  - Data Analysis
+  - Recommender Systems
+  - Data Visualization
+tags:
+  - R
+  - Data Visualization
+  - Data Analysis
+output: 
+  html_document:
+    toc: true
+    number_sections: true
+    code_folding: 'show'
+---
+
+
+
+<p>Interviewing for data science jobs is hard. Since the job definition and responsibilities vary significantly between companies and roles, you can never quite know what areas of the field you’ll be asked about during an interview. This is stressful for the interviewee and can result in misleading results for the interviewer.</p>
+<p>A while back I stumbled on a great <a href="https://www.linkedin.com/pulse/how-hire-test-data-skills-one-size-fits-all-interview-tanya-cashorali/">blog post</a> by Tanya Cashorali where she goes into detail about why she’s taken to using a take-home ‘test’ to evaluate potential data scientists. She even lays out a test dataset and problems for interviews.</p>
+<p>I loved her take on how bad many data science interviews are and I thought it would be great practice(and maybe useful for anyone who stumbles upon this post!) to work through the test she lays out. The test she proposes is simple, but can be answered on a variety of levels depending on the candidates experience. Using a dataset from the popular beer(yay beer!) review website Beer Advocate, you need to answer four analytics questions and communicate your findings:</p>
+<ol style="list-style-type: decimal">
+<li>Which brewery produces the strongest beers by ABV?</li>
+<li>If you had to pick 3 beers to recommend using only this data, which would you pick?</li>
+<li>Which of the factors(aroma, taste, appearance, palette) are most important in determining the overall quality of a beer?</li>
+<li>If I typically enjoy a beer due to its aroma and appearance, which beer style should I try?</li>
+</ol>
+<p>This is a really exciting dataset as a beer lover, so without further ado, let’s dive in!</p>
+<div id="data-exploration" class="section level2">
+<h2>Data Exploration</h2>
+<p>I always need to get a feel for the dataset before doing any sort of analysis. With 1,586,614 reviews, the dataset is large enough that I can’t just glance at it and understand it, but small enough that I don’t have to worry about using fancy techniques to speed things up–just load the data into R and start exploring!</p>
+<p>First, I want to know a bit about who’s represented in the dataset. I can see that there are 5,840 breweries and 66,055 beers represented. The breweries with the most reviews are pretty familiar–Sam Adams, Sierra Nevada, Dogfish, Bells– but where are the ‘macro’ breweries? It seems that the beer advocate dataset is a picture of the craft brew beer scene and won’t necessarily be representative of all beer drinkers. After all, you have to be pretty ‘in’ to beer to post reviews online and find your way into this dataset. The big 3 American macro-breweries (Anheuser, Millers and Coors) <em>are</em> present in the data<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>, but not sitting at the top with the most reviews like you might expect from the breweries that sell the most beer by <a href="https://www.forbes.com/sites/garystoller/2018/03/20/craft-breweries-dominate-the-top-50-but-guess-which-giants-rule-the-beer-market/#3c5064e6dcad">volume</a>. This isn’t particularly important for the questions being asked here, but it’s good to identify biases in your dataset as you recognize them.</p>
+<div id="most-reviewed-breweries" class="section level3">
+<h3>Most Reviewed Breweries</h3>
+<pre class="r"><code># 5840 different breweries represented in the dataset: Sam Adams the largest
+reviews_raw%&gt;%
+  count(brewery_id, brewery_name, sort = TRUE)%&gt;%
+  select(brewery_name, n)%&gt;%
+  head(8)%&gt;%
+  formattable::formattable()</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+brewery_name
+</th>
+<th style="text-align:right;">
+n
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+Boston Beer Company (Samuel Adams)
+</td>
+<td style="text-align:right;">
+39444
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Dogfish Head Brewery
+</td>
+<td style="text-align:right;">
+33839
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Stone Brewing Co.
+</td>
+<td style="text-align:right;">
+33066
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Sierra Nevada Brewing Co.
+</td>
+<td style="text-align:right;">
+28751
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Bell’s Brewery, Inc.
+</td>
+<td style="text-align:right;">
+25191
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Rogue Ales
+</td>
+<td style="text-align:right;">
+24083
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Founders Brewing Company
+</td>
+<td style="text-align:right;">
+20004
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Victory Brewing Company
+</td>
+<td style="text-align:right;">
+19479
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="most-reviewed-beers" class="section level3">
+<h3>Most Reviewed Beers</h3>
+<pre class="r"><code>#  66055 different beers reviewed. Lots of Stone, Sierra Nevada representation
+reviews_raw%&gt;%
+  count(beer_beerid, beer_name, brewery_name, sort = TRUE)%&gt;%
+  select(beer_name, brewery_name, n)%&gt;%
+  head(8)%&gt;%
+  formattable::formattable()</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+beer_name
+</th>
+<th style="text-align:right;">
+brewery_name
+</th>
+<th style="text-align:right;">
+n
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+90 Minute IPA
+</td>
+<td style="text-align:right;">
+Dogfish Head Brewery
+</td>
+<td style="text-align:right;">
+3290
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Old Rasputin Russian Imperial Stout
+</td>
+<td style="text-align:right;">
+North Coast Brewing Co.
+</td>
+<td style="text-align:right;">
+3111
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Sierra Nevada Celebration Ale
+</td>
+<td style="text-align:right;">
+Sierra Nevada Brewing Co.
+</td>
+<td style="text-align:right;">
+3000
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Two Hearted Ale
+</td>
+<td style="text-align:right;">
+Bell’s Brewery, Inc.
+</td>
+<td style="text-align:right;">
+2728
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Arrogant Bastard Ale
+</td>
+<td style="text-align:right;">
+Stone Brewing Co.
+</td>
+<td style="text-align:right;">
+2704
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Stone Ruination IPA
+</td>
+<td style="text-align:right;">
+Stone Brewing Co.
+</td>
+<td style="text-align:right;">
+2704
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Sierra Nevada Pale Ale
+</td>
+<td style="text-align:right;">
+Sierra Nevada Brewing Co.
+</td>
+<td style="text-align:right;">
+2587
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Stone IPA (India Pale Ale)
+</td>
+<td style="text-align:right;">
+Stone Brewing Co.
+</td>
+<td style="text-align:right;">
+2575
+</td>
+</tr>
+</tbody>
+</table>
+<p>Second, I want to know how many reviews beers typically get. If I’m going to recommend beers, it’s probably not a great idea to recommend a beer that’s only been reviewed 1 time–even if it got a perfect review. Similarly, saying a brewery produces the strongest beers by ABV probably means two different things if one brewery makes 15 different beers while the other only makes 1. This gets to the issue of thresholding–at what level do I need to exclude reviews/beers/breweries for not having enough data to give a reasonable answer?</p>
+</div>
+<div id="how-many-reviews-do-beers-receive" class="section level3">
+<h3>How Many Reviews do Beers Receive?</h3>
+<pre class="r"><code># create df of how many reviews each unique beer has gotten
+reviews_per_beer &lt;- reviews_raw %&gt;%
+  count(beer_beerid, beer_name, sort = TRUE)
+
+# create df of mean and median for easy plot labeling
+review_measures &lt;- reviews_per_beer %&gt;%
+  summarise(Mean = round(mean(n)),
+            Median = median(n))%&gt;%
+  # this gather just makes it a tidy df so I can use ggplot easily and get legend labels
+  gather()
+
+# create plot
+reviews_per_beer %&gt;%
+  ggplot(aes(n))+
+  # I like this blue
+  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
+  # need log scale to have an interpretable plot--most beers get very few reviews
+  scale_x_log10()+
+  # use review_measures to add mean/median lines to plot
+  geom_vline(data = review_measures, aes(xintercept = value, color = key), lty = 2, size = .9)+
+  # adjust y axis limits for &#39;better&#39; looking graph
+  scale_y_continuous(limits = c(0,25000),
+                     expand = c(0,0),
+                     labels = comma_format())+
+  theme(legend.position = c(.75, .87))+
+  labs(x = &quot;# of Reviews&quot;,
+       y = &quot;# of Beers&quot;,
+       title = &quot;How many reviews do beers get?&quot;,
+       subtitle = &quot;~80% of beers receive 10 or fewer reviews&quot;,
+       color = &quot;&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/review-counts-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>It turns out that most beers get <em>very</em> few reviews. Median reviews for a beer is just 2, but the mean, 24, is heavily pushed to the right by the very popular beers in the right tail of the distribution.</p>
+</div>
+<div id="how-many-beers-do-breweries-produce" class="section level3">
+<h3>How Many Beers do Breweries Produce?</h3>
+<p>It’s also going to be helpful to know how many distinct beers a typical brewery produces.</p>
+<pre class="r"><code># remove beers without abv listings and then see how many different beers breweries are producing.
+# Also tried to see how that compared to the mean/median # of beers made, but
+# that doesn&#39;t seem particularly useful
+beers_per_brewery &lt;- reviews_raw %&gt;%
+  filter(!is.na(beer_abv))%&gt;%
+  # double count statement: first counts brewery, beer, # reviews
+  #                         second aggregates that and returns number of distinct beers produced by brewery
+  count(brewery_name, beer_name, sort = TRUE)%&gt;%
+  count(brewery_name, sort = TRUE)%&gt;%
+  # a count of how many brewerys only make one beer
+  mutate(produce_one = sum(n==1)/n())
+
+# create df of mean and median for easy plot labeling
+brewery_measures &lt;- beers_per_brewery %&gt;%
+  summarise(Mean = mean(n),
+         Median = median(n))%&gt;%
+  gather()
+
+# create plot
+beers_per_brewery %&gt;%
+  ggplot(aes(n))+
+  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
+  geom_vline(data = brewery_measures, aes(xintercept = value, color = key), lty = 2, size = .9)+
+  scale_x_log10()+
+  scale_y_continuous(limits = c(0, 1100),
+                     expand = c(0,0),
+                     labels = comma_format())+
+  theme(legend.position = c(.75, .87))+
+  labs(x = &quot;# of Beers&quot;,
+       y = &quot;# of Breweries&quot;,
+       title = &quot;Number of Unique Beers Produced by Breweries&quot;,
+       subtitle = paste0(percent(beers_per_brewery$produce_one[1]), &quot; of breweries in the dataset only produce 1 beer&quot;),
+       color = &quot;&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/beer-produced-by-breweries-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>20.2% of breweries only make one beer! The mean number of beers a brewery produces is just 9, with a median of 4. So for the most part, breweries aren’t producing(or at least people aren’t reviewing) <em>that</em> many different beers. This will need to be dealt with when deciding how many beers is ‘enough’ to include a brewery in the highest ABV brewery question.</p>
+</div>
+<div id="does-the-style-of-beer-matter-you-bet-it-does" class="section level3">
+<h3>Does the Style of Beer Matter? You Bet it Does!</h3>
+<p>As a final exploratory question, I want to examine how the different styles of beer fare. Are some considerably more popular? Or are some just better? Are some styles really consistent–ie you see very little variance in how it’s rated? I really have no idea, but these seem important if I want to recommend a beer style in question four.</p>
+<p>First, there are 104 different styles of beer represented in the dataset. As you can see, several styles are <strong>really</strong> popular, while others are quite uncommon.</p>
+<pre class="r"><code># 104 styles of beer(some seem very close to the same thing)
+reviews_raw%&gt;%
+  count(beer_style, sort = TRUE)%&gt;%
+  head(5)</code></pre>
+<pre><code>## # A tibble: 5 x 2
+##   beer_style                            n
+##   &lt;chr&gt;                             &lt;int&gt;
+## 1 American IPA                     117586
+## 2 American Double / Imperial IPA    85977
+## 3 American Pale Ale (APA)           63469
+## 4 Russian Imperial Stout            54129
+## 5 American Double / Imperial Stout  50705</code></pre>
+<pre class="r"><code>reviews_raw %&gt;%
+  count(beer_style, sort = TRUE)%&gt;%
+  arrange(n)%&gt;%
+  head(5)</code></pre>
+<pre><code>## # A tibble: 5 x 2
+##   beer_style     n
+##   &lt;chr&gt;      &lt;int&gt;
+## 1 Happoshu     241
+## 2 Kvass        297
+## 3 Roggenbier   466
+## 4 Faro         609
+## 5 Gose         686</code></pre>
+<p>I think it could be useful to know what effect the style of beer has on the overall review score. Knowing a little bit about beer, I could see a situation where one style–let’s say Quadrupels(Quads)–are always highly rated, but another–maybe American Lagers–are generally rated very low. Just knowing the style of the beer might give us a lot of information about how that beer is going to be reviewed.</p>
+<p>Looking at the top 5 and bottom 5 scoring styles, it’s pretty shocking how different their average scores are. Is it really that difficult to make a delicious Light Lager? Or on the flip side, are Quads that easy to make–or do humans just love the taste of them? Who knows, but I know I want to dive a tiny bit deeper to see how much variance there is in the reviews of each style of beer. Maybe it’s possible to get a good Light Lager, but there are a host of bad ones out there dragging down the average score.</p>
+<pre class="r"><code># Looking at how average score varies by style of beer.
+avg_score_by_style &lt;- reviews_raw%&gt;%
+  group_by(beer_style)%&gt;%
+  summarise(avg_score = mean(review_overall),
+            reviews = n())%&gt;%
+  ungroup()%&gt;%
+  arrange(desc(avg_score))
+
+# Grab top 5 and bottom 5 and bind together in df
+top_5 &lt;- avg_score_by_style %&gt;%
+  top_n(5, avg_score)
+bottom_5 &lt;- avg_score_by_style%&gt;%
+  top_n(-5, avg_score)
+top_bottom_5 &lt;- bind_rows(top_5, bottom_5)
+
+formattable::formattable(top_bottom_5)</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+beer_style
+</th>
+<th style="text-align:right;">
+avg_score
+</th>
+<th style="text-align:right;">
+reviews
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+American Wild Ale
+</td>
+<td style="text-align:right;">
+4.093262
+</td>
+<td style="text-align:right;">
+17794
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Gueuze
+</td>
+<td style="text-align:right;">
+4.086287
+</td>
+<td style="text-align:right;">
+6009
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Quadrupel (Quad)
+</td>
+<td style="text-align:right;">
+4.071630
+</td>
+<td style="text-align:right;">
+18086
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Lambic - Unblended
+</td>
+<td style="text-align:right;">
+4.048923
+</td>
+<td style="text-align:right;">
+1114
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+American Double / Imperial Stout
+</td>
+<td style="text-align:right;">
+4.029820
+</td>
+<td style="text-align:right;">
+50705
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Happoshu
+</td>
+<td style="text-align:right;">
+2.914938
+</td>
+<td style="text-align:right;">
+241
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Euro Strong Lager
+</td>
+<td style="text-align:right;">
+2.862518
+</td>
+<td style="text-align:right;">
+2724
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Light Lager
+</td>
+<td style="text-align:right;">
+2.698833
+</td>
+<td style="text-align:right;">
+14311
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+American Malt Liquor
+</td>
+<td style="text-align:right;">
+2.678854
+</td>
+<td style="text-align:right;">
+3925
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Low Alcohol Beer
+</td>
+<td style="text-align:right;">
+2.578268
+</td>
+<td style="text-align:right;">
+1201
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="overall-review-scores-for-different-beer-styles-how-much-do-they-vary" class="section level3">
+<h3>Overall review scores for different beer styles: How much do they vary?</h3>
+<p>I can generate confidence intervals to see how much variance there is in the scores of different styles of beer. There are a couple different ways to approach this–mainly related to how you decide to group–and each have their advantages so I include both here.</p>
+<div id="filter-then-filter-again-styles-that-have-30-different-beers-that-had-at-least-30-reviews" class="section level4">
+<h4>Filter, then filter again! Styles that have 30 different beers that had at least 30 reviews</h4>
+<p>The first approach groups by unique beers and then style. So, for example, beer 1904 is an American IPA that has 3000 reviews and an average score of ~4.17. Once I have this information, I can generate confidence intervals, but I need to deal with the tricky question of what beers to include in the calculations. If a beer is only reviewed 1 time, should it be included? What about if a beer style only has 15 different beers to it’s name? In order to get a good estimation of both the point estimate and the confidence intervals, I need to have enough data about each beer, otherwise it could be that only one person reviewed a beer and they just had a terrible day and unjustly gave it 1 star–and then are skewing our analysis here.</p>
+<p>It’s definitely a judgement call how to filter here, but I want to feel confident my intervals are meaningful. I’m only keeping beers that have &gt;= 30 reviews(about 7100), then I count how many beers of each style remain and I’m filtering again to keep only those styles with at least 30 beers–so each style that remains has at least 30 different beers that had at least 30 reviews.</p>
+<pre class="r"><code>library(broom)
+# This first approach groups by the unique beers and styles--so it averages
+# the score of each individual beer and then our final estimates are an average of 
+# all the unique beers in that beer style. This gives relatievely more weight to beers with
+# fewer reviews
+
+# Have to group differently to show conf intervals for scores of beer styles
+by_beerid &lt;- reviews_raw %&gt;%
+  group_by(beer_beerid, beer_style)%&gt;%
+  summarise(reviews = n(),
+            avg_score = mean(review_overall))%&gt;%
+  ungroup()%&gt;%
+  arrange(desc(reviews))
+
+
+#quick df to use for getting number of beers remaining after filter(awful way to do this, but I&#39;m calling this df below)
+filtered_beers &lt;- by_beerid%&gt;%
+  # filter to beers with at least 30 reviews- leaves us with 7174 different beers
+  filter(reviews &gt;= 30)%&gt;%
+  # count how many beers of each style remain
+  add_count(beer_style)%&gt;%
+  #filter again to keep styles with at least 30 different beers remaining (6783)
+  filter(n &gt;= 30)
+
+# generate confidence intervals for styles of beer
+beer_style_conf_int &lt;- by_beerid%&gt;%
+  # filter to beers with at least 30 reviews- leaves us with 7174 different beers
+  filter(reviews &gt;= 30)%&gt;%
+  # count how many beers of each style remain
+  add_count(beer_style)%&gt;%
+  #filter again to keep styles with at least 30 different beers remaining
+  filter(n &gt;= 30)%&gt;%
+  # creates nested list column for each beer style with each beer included, it&#39;s average score
+  # and the total number of beers of that style
+  nest(-beer_style)%&gt;%
+  # use this list to do a t.test and create a confidence interval for each beer style
+  mutate(model = map(data, ~t.test(.$avg_score)))%&gt;%
+  # unnest all this information into a nice tidy df
+  unnest(map(model, tidy))
+
+beer_style_conf_int%&gt;%
+  # reorder beers by estimated overall score
+  mutate(beer_style = fct_reorder(beer_style, estimate))%&gt;%
+  # select top 20 beers
+  top_n(20, estimate)%&gt;%
+  ggplot(aes(estimate, beer_style))+
+  geom_point()+
+  # errorbarh creates the &#39;tiefighter&#39; style graph I like for confidence intervals
+  geom_errorbarh(aes(xmin = conf.low,
+                     xmax = conf.high))+
+  labs(x = &quot;Overall Review Score&quot;,
+       y = &quot;&quot;,
+       title = &quot;Top 20 Beer Styles&quot;,
+       subtitle = &quot;Estimated Review Score of Beer Styles with 95% Confidence Intervals&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/top-20-styles-conf-int-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>The top styles here don’t surprise me, but it’s very interesting to see which styles are more variable than others. If you were to pick a random Imperial Stout/Barleywine/American IPA, you could be pretty confident you know exactly how good of a beer you are going to get. But if you pick something like a Gueuze/Foreign Stout/Old Ale, there’s a bit more variation in how ‘good’ the beer is–it could be the best beer you’ve ever had or it could be OK.</p>
+<p>The bottom part of the style list is interesting not for the styles on it, but for how much more variance there is. Be careful to look at the x-axis labels here(since they are a little misleading compared to the top styles graph), because there’s actually a lot more variance in how good or bad these beers are. Many of these styles have confidence intervals .2-.3 points wide, whereas the top styles were rarely over .1 points wide. English Strong Ales, for example, have a 95% confidence interval from 3.59 - 3.83. This means it’s possible that a English Strong Ale is rated as highly as a beer on the top 20 beer styles graph. But it also means that there are a lot of English Strong Ales that are merely OK. Simply put, there’s more variance in the reviews of that style of beer.</p>
+<pre class="r"><code>beer_style_conf_int%&gt;%
+  mutate(beer_style = fct_reorder(beer_style, estimate))%&gt;%
+  top_n(-20, estimate)%&gt;%
+  ggplot(aes(estimate, beer_style))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = conf.low,
+                     xmax = conf.high))+
+  # attempt to make the x-axis less deceptive when compared to the top 20 one above -- hard to do since bottom 20
+  # goes from 2.4-3.9 while top 20 is 3.8-4.2.
+  scale_x_continuous(limits = c(2.35, 3.9), breaks = seq(from = 2.4, to = 4, by = .1), expand = c(0,0))+
+  labs(x = &quot;Overall Review Score&quot;,
+       y = &quot;&quot;,
+       title = &quot;Bottom 20 Beer Styles&quot;,
+       subtitle = &quot;Estimated Review Score of Beer Styles with 95% Confidence Intervals&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/bottom-20-beer-styles-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+</div>
+<div id="keep-all-the-beerswithin-reason" class="section level4">
+<h4>Keep all the beers–within reason!</h4>
+<p>The filtering approach above has a clear bias. Only beers–and beer styles– that are popular are included in the final results. There’s a very good reason for filtering out those beers, but we definitely lose a lot of beers in the process–some 59,272. Another approach that avoids losing so many beers is to avoid filtering out individual beers with very few reviews and instead to treat beers as members of the beer style family. So instead of removing all those beers with, say, 1 or 2 reviews, I say ‘This Pale Ale only has 1 review, but it’s still a Pale Ale, so let’s treat it like one’. I still do a quick filter to make sure no style has fewer than 30 reviews(spoiler: none do!) and then plot the results with confidence intervals.</p>
+<pre class="r"><code># This approach creates a unique id for each review(since there isn&#39;t one in the dataset)
+# and then it groups by beer style. This means I keep all individual reviews, but those
+# unique beers with very few reviews aren&#39;t present as much so they don&#39;t get a lot of weight. 
+
+# Assign a unique identifier to each review first
+# This seems like a really clunky way of doing this, so I am probably missing a much simpler way.
+by_reviewid &lt;- reviews_raw %&gt;%
+  mutate(unique_id = 1:nrow(reviews_raw))%&gt;%
+  mutate(avg_score = review_overall)%&gt;%
+  select(unique_id, beer_style, avg_score, beer_beerid)
+
+# generate the conf intervals on the reviewid data
+beer_style_conf_int_by_reviewid &lt;- by_reviewid%&gt;%
+  add_count(beer_style)%&gt;%
+  # filters to beers styles with at least 30 reviews
+  filter(n &gt;=30)%&gt;%
+  nest(-beer_style)%&gt;%
+  mutate(model = map(data, ~t.test(.$avg_score)))%&gt;%
+  unnest(map(model, tidy))
+
+
+# create plot
+beer_style_conf_int_by_reviewid%&gt;%
+  mutate(beer_style = fct_reorder(beer_style, estimate))%&gt;%
+  top_n(20, estimate)%&gt;%
+  ggplot(aes(estimate, beer_style))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = conf.low,
+                     xmax = conf.high))+
+  labs(x = &quot;Overall Review Score&quot;,
+       y = &quot;&quot;,
+       title = &quot;Top 20 Beer Styles: No filtering to remove beers with few reviews&quot;,
+       subtitle = &quot;Estimated Review Score of Beer Styles with 95% Confidence Intervals&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/top-styles-all-beers-approach-1.png" width="90%" height="90%" style="display: block; margin: auto;" /> The results are pretty similar to the other approach with some small differences. First, the confidence intervals are narrower for both graphs. This is expected because of how I did the grouping. Instead of having, say, 100 beers to base the estimates off of, these graphs may use thousands of reviews–remember all those one review beers we filtered out before? With all that additional data, your confidence intervals <em>should</em> get narrower. Second, we see a handful of new styles present on each graph. Lambic - Unblended, Gose and Roggenbier all didn’t make the cut before, but are present now.</p>
+<p>Essentially though, the information present is the same. Reviewers love stouts, belgian ales, sours and IPAs and they tend to dislike lagers and light beers.</p>
+<pre class="r"><code>beer_style_conf_int_by_reviewid%&gt;%
+  mutate(beer_style = fct_reorder(beer_style, estimate))%&gt;%
+  top_n(-20, estimate)%&gt;%
+  ggplot(aes(estimate, beer_style))+
+  geom_point()+
+  geom_errorbarh(aes(xmin = conf.low,
+                     xmax = conf.high))+
+  labs(x = &quot;Overall Review Score&quot;,
+       y = &quot;&quot;,
+       title = &quot;Bottom 20 Beer Styles: No filtering to remove beers with few reviews&quot;,
+       subtitle = &quot;Estimated Review Score of Beer Styles with 95% Confidence Intervals&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/bottom-styles-all-beers-approach-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+</div>
+<div id="which-brewery-produces-the-strongest-beers-by-abv" class="section level2">
+<h2>Which brewery produces the strongest beers by ABV%?</h2>
+<p>With a better handle on the dataset, now I can actually address the question! First things first, there are 67,785 reviews with no ABV data so we need to remove that data. It’s only 4.27% of all reviews, so for the time being I’m not going to worry about just removing those reviews. Now the question is–what <em>is</em> a strong beer anyway? You can see from the histogram of the distribution of ABV’s that the vast majority of beers are under 10% ABV. Only 18 beers out of over 66,000! are over 20% ABV.</p>
+<pre class="r"><code># Looking at beer abv; removing reviews with missing abv(about 67k)
+reviews_raw %&gt;%
+  filter(!is.na(beer_abv))%&gt;%
+  ggplot(aes(beer_abv))+
+  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
+  scale_y_continuous(labels = scales::comma_format(), expand = c(0,0))+
+  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;),
+                     expand = c(0,0),
+                     breaks = seq(from = 0, to = 60, by = 10))+
+  labs(x = &quot;ABV&quot;,
+       y = &quot;&quot;,
+       title = &quot;Distribution of Beer ABV %&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/beer-abv-exploration-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># Only 18 beers in the dataset are about 20% abv
+reviews_raw%&gt;%
+  filter(!is.na(beer_abv), beer_abv &gt; 20)%&gt;%
+  count(beer_name, beer_abv, brewery_name, beer_style, sort = TRUE)%&gt;%
+  select(-n)%&gt;%
+  arrange(desc(beer_abv))%&gt;%
+  formattable::formattable()</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+beer_name
+</th>
+<th style="text-align:right;">
+beer_abv
+</th>
+<th style="text-align:right;">
+brewery_name
+</th>
+<th style="text-align:right;">
+beer_style
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 57%
+</td>
+<td style="text-align:right;">
+57.70
+</td>
+<td style="text-align:right;">
+Schorschbräu
+</td>
+<td style="text-align:right;">
+Eisbock
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 43%
+</td>
+<td style="text-align:right;">
+43.00
+</td>
+<td style="text-align:right;">
+Schorschbräu
+</td>
+<td style="text-align:right;">
+Eisbock
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Sink The Bismarck!
+</td>
+<td style="text-align:right;">
+41.00
+</td>
+<td style="text-align:right;">
+BrewDog
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 40%
+</td>
+<td style="text-align:right;">
+39.44
+</td>
+<td style="text-align:right;">
+Schorschbräu
+</td>
+<td style="text-align:right;">
+Eisbock
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Black Damnation VI - Messy
+</td>
+<td style="text-align:right;">
+39.00
+</td>
+<td style="text-align:right;">
+De Struise Brouwers
+</td>
+<td style="text-align:right;">
+American Double / Imperial Stout
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Tactical Nuclear Penguin
+</td>
+<td style="text-align:right;">
+32.00
+</td>
+<td style="text-align:right;">
+BrewDog
+</td>
+<td style="text-align:right;">
+American Double / Imperial Stout
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 31%
+</td>
+<td style="text-align:right;">
+30.86
+</td>
+<td style="text-align:right;">
+Schorschbräu
+</td>
+<td style="text-align:right;">
+Eisbock
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Dave
+</td>
+<td style="text-align:right;">
+29.00
+</td>
+<td style="text-align:right;">
+Hair of the Dog Brewing Company / Brewery and Tasting Room
+</td>
+<td style="text-align:right;">
+English Barleywine
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Ghost Deer
+</td>
+<td style="text-align:right;">
+28.00
+</td>
+<td style="text-align:right;">
+BrewDog
+</td>
+<td style="text-align:right;">
+Belgian Strong Pale Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Samuel Adams Utopias
+</td>
+<td style="text-align:right;">
+27.00
+</td>
+<td style="text-align:right;">
+Boston Beer Company (Samuel Adams)
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Black Damnation V - Double Black
+</td>
+<td style="text-align:right;">
+26.00
+</td>
+<td style="text-align:right;">
+De Struise Brouwers
+</td>
+<td style="text-align:right;">
+American Double / Imperial Stout
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Samuel Adams Utopias MMIII
+</td>
+<td style="text-align:right;">
+25.00
+</td>
+<td style="text-align:right;">
+Boston Beer Company (Samuel Adams)
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Samuel Adams Utopias (Aged On Cocoa Nibs)
+</td>
+<td style="text-align:right;">
+25.00
+</td>
+<td style="text-align:right;">
+Boston Beer Company (Samuel Adams)
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Samuel Adams Utopias MMII
+</td>
+<td style="text-align:right;">
+24.00
+</td>
+<td style="text-align:right;">
+Boston Beer Company (Samuel Adams)
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Black Damnation XI - Special Kay
+</td>
+<td style="text-align:right;">
+22.00
+</td>
+<td style="text-align:right;">
+De Struise Brouwers
+</td>
+<td style="text-align:right;">
+Russian Imperial Stout
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+44 Magnum
+</td>
+<td style="text-align:right;">
+22.00
+</td>
+<td style="text-align:right;">
+LagerHaus Grill &amp; Brewery
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Colossus
+</td>
+<td style="text-align:right;">
+21.92
+</td>
+<td style="text-align:right;">
+DuClaw Brewing Company
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Samuel Adams Millennium
+</td>
+<td style="text-align:right;">
+21.00
+</td>
+<td style="text-align:right;">
+Boston Beer Company (Samuel Adams)
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+</tbody>
+</table>
+<p>If I divide the data into reviews of beers &gt; 20% ABV and those &lt; 20% ABV, it’s easier to see how uncommon reviews for really high ABV beers are.</p>
+<pre class="r"><code>reviews_raw%&gt;%
+  filter(!is.na(beer_abv), beer_abv &gt; 20)%&gt;%
+  ggplot(aes(beer_abv))+
+  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
+  scale_y_continuous(labels = scales::comma_format(), expand = c(0,0))+
+  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;))+
+  labs(x = &quot;ABV&quot;,
+       y = &quot;&quot;,
+       title = &quot;Distribution of Beer ABV: Only beers &gt;20% ABV&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/greater-20-abv-distribution-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>The vast majority of beers reviewed fall right around the 5-6% range.</p>
+<pre class="r"><code># Most beers hoover around the 5% range which isn&#39;t surprising as a beer drinker
+reviews_raw %&gt;%
+  filter(!is.na(beer_abv), beer_abv &lt; 20)%&gt;%
+  ggplot(aes(beer_abv))+
+  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
+  scale_y_continuous(labels = scales::comma_format(), expand = c(0,0))+
+  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;),
+                     expand = c(0,0))+
+  labs(x = &quot;ABV&quot;,
+       y = &quot;&quot;,
+       title = &quot;Distribution of Beer ABV: Only beers &lt;20% ABV&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/less-20,%20abv%20distribution-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>The question of which brewery produces the strongest beers by ABV has more nuance than it might appear. First, the question asks which brewery produces the strongest <strong>beers</strong> which I am taking to mean it needs to produce more than one beer. Second, how should I measure how strong a breweries beers are? An average of their ABVs? Maybe take the median? What about looking at the proportion of beers that a brewery produces that are above some ‘strong’ beer threshold? All these methods seem to have merit and are pretty simple and quick to perform. Let’s try them out and see what they tell us.</p>
+<p>After a bit of filtering, grouping and aggregation(which you can see in the code fold below), you can see that Schorschbräu ranks at the top of both the mean and median rankings. In fact, the top 4 on both graphs are the same–albeit with one positional swap. One note: Why did I only include breweries that make 4 or more beers? Because the median number of beers produced is 4 and that seemed reasonable.</p>
+<pre class="r"><code>average_abv &lt;- reviews_raw %&gt;%
+  # remove reviews with missing abv
+  filter(!is.na(beer_abv), !is.na(brewery_name))%&gt;%
+  # don&#39;t want a weighted average, so we grab a df of unique beers for all breweries
+  distinct(brewery_id, beer_name, .keep_all = TRUE)%&gt;%
+  # group them by the brewery and the beer
+  group_by(brewery_id, brewery_name)%&gt;%
+  # getting mean, median and number of beers produced by each brewery
+  summarise(avg_abv = mean(beer_abv),
+            med_abv = median(beer_abv),
+            num_beers = n()) %&gt;%
+  ungroup()%&gt;%
+  # get the median and mean number of beers produced overall--will use for determining the threshold to cutoff breweries
+  mutate(mean_beers_produced_overall = mean(num_beers),
+         median_beers_produced_overall = median(num_beers))
+ 
+
+# several brewery_names aren&#39;t unique; append the unique id to the brewery name to get a unique brewery_name
+duplicate_names &lt;- average_abv %&gt;%
+  filter(duplicated(.[[&quot;brewery_name&quot;]]))%&gt;%
+  select(brewery_name)
+
+
+average_abv &lt;- average_abv %&gt;%
+  # if the breweries in the dpulicated names df, paste the id number on the end; otherwise just the brewery name
+  mutate(brewery_name = ifelse(brewery_name %in% duplicate_names$brewery_name, paste0(brewery_name, &quot;(&quot;, brewery_id, &quot;)&quot;),
+                               brewery_name))%&gt;%
+  # several breweries have multiple names separated by &#39;/&#39;. Keeping only the first name used 
+  separate(brewery_name, 
+           sep = &quot;/&quot;,
+           into = c(&quot;brewery_name&quot;, NA))
+
+# create strongest mean beer plot
+average_abv %&gt;%
+  mutate(brewery_name = fct_reorder(brewery_name, avg_abv))%&gt;%
+  # Median number of beers produced is 4 so only keeping those at or above that threshold
+  filter(num_beers &gt;= 4)%&gt;%
+  top_n(10, avg_abv)%&gt;%
+  ggplot(aes(avg_abv, brewery_name))+
+  geom_point(color = &quot;#0072B2&quot;, alpha = .8, size = 4)+
+  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;))+
+  labs(x = &quot;ABV&quot;,
+       y = &quot;&quot;, 
+       title = &quot;Breweries Producing the &#39;Strongest&#39; Beers: By Mean&quot;,
+       subtitle = &quot;Only Breweries producing 4 or more different beers&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beers-by-mean-median-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># create strongest median beer plot
+average_abv %&gt;%
+  distinct(brewery_name, .keep_all = TRUE)%&gt;%
+  mutate(brewery_name = fct_reorder(brewery_name, med_abv))%&gt;%
+  filter(num_beers &gt;= 4)%&gt;%
+  top_n(10, med_abv)%&gt;%
+  ggplot(aes(med_abv, brewery_name))+
+  geom_point(color = &quot;#0072B2&quot;, alpha = .8, size = 4)+
+  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;))+
+  labs(x = &quot;ABV&quot;,
+       y = &quot;&quot;, 
+       title = &quot;Breweries Producing the &#39;Strongest&#39; Beers: By Median&quot;,
+       subtitle = &quot;Only Breweries producing 4 or more different beers&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beers-by-mean-median-2.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>mean_median_beerabv &lt;- reviews_raw %&gt;%
+  # remove reviews with missing abv
+  filter(!is.na(beer_abv), !is.na(brewery_name))%&gt;%
+  # don&#39;t want a weighted average, so we grab a df of unique beers for all breweries
+  distinct(brewery_id, beer_name, .keep_all = TRUE)%&gt;%
+  summarise(mean_abv = mean(beer_abv),
+            median_abv = median(beer_abv),
+            q75 = quantile(beer_abv, .75),
+            above_10 = (sum(beer_abv&gt;=10)/n())*100)</code></pre>
+<p>Now what if the brewery that produces the strongest beers is the one that has the highest proportion of its beers above some ABV threshold. We know the mean ABV for a beer is 6.27% (median 5.7%). In fact, the 75th percentile for beer ABV is only 7.2%. 10% is where I, personally, start to think a beer is strong and with only 6.51% of beers having greater than or equal to 10% ABV, I think it’s a pretty reasonable mark of a ‘strong’ beer.</p>
+<pre class="r"><code>beers_above_ten_perc &lt;- reviews_raw %&gt;%
+  # should have done this filtering above once and then saved as new df instead of duplicating again
+  filter(!is.na(beer_abv), !is.na(brewery_name))%&gt;%
+  #alter the brewery name like above to uniquely identify those duplicate brewery names
+  mutate(brewery_name = ifelse(brewery_name %in% duplicate_names$brewery_name, paste0(brewery_name, &quot;(&quot;, brewery_id, &quot;)&quot;),
+                               brewery_name))%&gt;%
+  separate(brewery_name, 
+           sep = &quot;/&quot;,
+           into = c(&quot;brewery_name&quot;, NA))%&gt;%
+  distinct(brewery_name,
+           beer_name,
+           .keep_all = TRUE)%&gt;%
+  group_by(brewery_name)%&gt;%
+  summarise(beers = n(),
+            beers_above_10 = sum(beer_abv &gt;=10),
+            per_abv_10 = beers_above_10/beers)
+
+beers_above_ten_perc%&gt;%
+  filter(beers &gt;= 4)%&gt;%
+  mutate(brewery_name = fct_reorder(brewery_name, per_abv_10))%&gt;%
+  top_n(10, per_abv_10)%&gt;%
+  ggplot(aes(per_abv_10, brewery_name))+
+  geom_point(color = &quot;#0072B2&quot;, alpha = .8, size = 4)+
+  scale_x_continuous(labels = percent_format())+
+  expand_limits(x = .3)+
+  labs(x = &quot;% of Beers Above 10% ABV&quot;,
+       y = &quot;&quot;,
+       title = &quot;What Percentage of Breweries Beers are &gt;10% ABV&quot;,
+       subtitle = &quot;For breweries producing 4 or more beers&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beer-by-proportion-above-10-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>Yet again, Schorschbräu sits at the top. They only make 10 different beers, but 90% of them are 10% ABV or higher! For a brewery that produces quite a few more beers, but still cranks out high ABV stuff, AleSmith Brewing Company is up there. They make over 50 different beers and over 70% of them are above 10% ABV.</p>
+<p>At the end of the day, Shorschbrau brewery seems to sit at the top of the ‘strong’ beer mountain–regardless of the metric I used. With a little googling, it seems they are well known for pushing the limits of strong beers. They even produce one that is 57% ABV!</p>
+<pre class="r"><code>reviews_raw%&gt;%
+  filter(!is.na(beer_abv), brewery_name == &quot;Schorschbräu&quot;)%&gt;%
+  distinct(beer_name, .keep_all = TRUE)%&gt;%
+  select(beer_name, beer_abv)%&gt;%
+  arrange(desc(beer_abv))%&gt;%
+  formattable::formattable()</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+beer_name
+</th>
+<th style="text-align:right;">
+beer_abv
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 57%
+</td>
+<td style="text-align:right;">
+57.70
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 43%
+</td>
+<td style="text-align:right;">
+43.00
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 40%
+</td>
+<td style="text-align:right;">
+39.44
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Schorschbock 31%
+</td>
+<td style="text-align:right;">
+30.86
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbock
+</td>
+<td style="text-align:right;">
+16.00
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorsch Weizen 16%
+</td>
+<td style="text-align:right;">
+16.00
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbock Ice 13
+</td>
+<td style="text-align:right;">
+13.00
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Donner Bock
+</td>
+<td style="text-align:right;">
+13.00
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Donner Weizen
+</td>
+<td style="text-align:right;">
+13.00
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+Schorschbräu Dunkles
+</td>
+<td style="text-align:right;">
+4.90
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="if-you-had-to-pick-3-beers-to-recommend-using-only-this-data-which-would-you-pick" class="section level2">
+<h2>If you had to pick 3 beers to recommend using only this data, which would you pick?</h2>
+<p>Yet again, there are several ways you could approach this question. People seem to have beer style preferences, so maybe recommending 3 beers based on what style beer you like would perform well–you like Hefeweizens, here are 3 Hefeweizens that you might like. I think this approach probably works OK, but it’s just recommending the top rated beers of each style to you. It’s possible to get more personalized recommendations by building a recommender system. I’m not sure I’d take this approach if I had a strict time limit for this take home test, but since I’m blogging about the process, I’m taking the fun approach and build a recommender system.</p>
+<p>So what is a recommender system anyway? If you’ve ever used Netflix or Amazon you’ve encountered them many, many times. A recommendation system takes past user information–in our case beer ratings–to generate predictions for how that user would rate a beer they haven’t tried. There are many ways to do this nowadays, but an extremely popular(and good) method is called matrix factorization. If you want a detailed explanation of the math, check out this great <a href="http://www.albertauyeung.com/post/python-matrix-factorization/">blog post</a>, but the intuition is relatively easy to grasp. First, you build a matrix with users(reviewers in this case) as the rows and items(beers) as the columns. Each cell is the rating that reviewer1 gave beer1, for example. When you flesh out this matrix, there will be empty cells where a reviewer hasn’t tried beer21 or beer143. With matrix factorization we predict what we think the value of these empty cells should be–what would this user rate that beer if they try it? So by predicting the value of these empty cells, the recommendation system is giving us just what we need to recommend new beers to people. What beers should you try? The ones with the highest predicted rating that you haven’t tried yet?</p>
+<p>It certainly seems pretty hand-wavy to say we just fill in some cells and use those values to recommend beers. How do you actually generate the predictions you might wonder? We do this by discovering the <em>latent features</em> that determine how a user rates items. The whole concept of matrix factorization works because we can take advantage of the fact that individuals don’t have 100% unique preferences. Our preferences are clustered. Maybe we like movies with a certain actress. Maybe we like a certain genre of movie. Or perhaps we like clothing from a certain designer or with a certain color palette. With beer, maybe we like beers of a certain style or beers that are extra hoppy. These are all things that could be latent features in a recommendation system. Using these latent features we can infer that if user1 and user2 both have a feature ‘Likes movies with Tom Hanks’, then a new movie with Tom Hanks will have a high predicted value for them.</p>
+<p>The details of how you solve for these latent features algorithmically can be found in the blog post I linked above(spoiler: you use gradient descent to solve for a user association matrix <strong>P</strong> and an item association matrix <strong>Q</strong>). For our purposes, it’s enough to think we are generating features of reviewers–reviewers that like bitter beers, reviewers that like chocolate stouts, reviewer that like beers from a certain area or of a certain ABV–and generating features for beers–beers that are high ABV, beers that are fruity or bitter, beers from a specific brewery–and using those to construct predictions for unseen beers.</p>
+<p>Luckily, there are several great packages in R that allow for easy implementation of matrix factorization. First, I need to do a bit of cleanup. Most reviewers don’t review many beers and most beers don’t get reviewed many times. We like a sparse matrix, but we don’t gain a lot of information from reviewers that review one time or beers than are only reviewed one time. We need to only include reviewers and beers above some threshold.</p>
+<pre class="r"><code>reviews_raw %&gt;%
+  count(review_profilename, sort = TRUE)%&gt;%
+  ggplot(aes(n))+
+  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
+  scale_x_log10()+
+  labs(x = &quot;# of Reviews&quot;,
+       y = &quot;# of Reviewers&quot;,
+       title = &quot;How many reviews are reviewers posting?&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/number-of-reviews-histogram-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>I’m filtering the dataset to only include reviewers who have reviewed at least 50 beers and only include beers with at least 100 reviews. With this dataset, I assign new indexes for user_id and beer_id (starting at 1) and then build a sparse triplet matrix–that’s just a fancy way of saying I build a matrix where I only include user and beer combinations that actually have a rating and I make sure it’s of the form (user_id, beer_id, rating).</p>
+<pre class="r"><code># filter to reviewers who have reviewed above 50 beers and beers with greater than 100 reviews
+over_50_reviews &lt;- reviews_raw%&gt;%
+  add_count(review_profilename)%&gt;%
+  filter(n &gt;= 50)%&gt;%
+  add_count(beer_beerid)%&gt;%
+  rename(num_reviews = n)%&gt;%
+  filter(num_reviews &gt;=100, 
+         !is.na(beer_name),
+         !is.na(review_profilename),
+         !is.na(review_overall))%&gt;%
+  # add new user_id(starting at 1) and beer_id(starting at 1): needed for recosystem triplet matrix
+  mutate(., user_id = group_indices(., review_profilename),
+         beer_id = group_indices(., beer_beerid))
+
+
+# recosystem requires a triplet matrix of the form (user, beer, rating)
+user_beer_triplet &lt;- over_50_reviews %&gt;%
+  select(user_id, beer_id, review_overall)</code></pre>
+<p>To train the actual model I need to specify the inputs for the training function and then set the parameters. The main parameter to focus on is <em>dim</em>. This determines the number of latent factors to fit. In playing around, I found that the default of 10 was too few factors. It gave reasonable recommendations, but it was essentially recommending the same beers to everyone, regardless of personal preferences. After a bit of tinkering, I decided to use 200 and see how specific the recommendations would get. You could probably go higher, but the model takes longer to fit and the results were pretty good at 200 already. The code for training and generating predictions for the recommender is in the code chunk below and I’d encourage you do check it out–even though it’s basically straight from the recosystem documentation.</p>
+<pre class="r"><code>library(recosystem)
+#create recosystem object
+r &lt;- Reco()
+
+# training set is the set of items that actually were rated. In a more advanced system I&#39;d have a separate train/test split for
+# the training of the model
+# data_memory specifics the inputs to the $train and $predict functions
+train_set = data_memory(user_index = user_beer_triplet$user_id,
+                        item_index = user_beer_triplet$beer_id,
+                        rating = user_beer_triplet$review_overall,
+                        index1 = TRUE)
+
+# dim parameter controls the number of latent factors in the model.
+# Default dim = 10 and that&#39;s too few--you end up having pretty much
+# the same beers recommended to everyone. There is a balancing to be done here
+# of creating too many latent factors and essentially overfitting and too few
+# and giving really generic recommendations
+r$train(train_set, opts = list(dim = 200,                        
+                               costp_l1 = 0, costp_l2 = 0.01,   
+                               costq_l1 = 0, costq_l2 = 0.01,   
+                               niter = 20,                      
+                               nthread = 6))
+
+# Save model since it takes some time to generate and I need it later
+saveRDS(r, &quot;beer_reco_model.RDS&quot;)
+
+# generate predictions for all users ahead of time and save that object
+
+# build a grid of all user beer combinations to feed into recosystem
+beers &lt;- 1:n_distinct(user_beer_triplet$beer_id)
+users &lt;- 1:n_distinct(user_beer_triplet$user_id)
+pred &lt;- expand.grid(user = users, beer = beers)
+# create recosystem specific data object
+prediction_set &lt;- data_memory(pred$user,
+                              pred$beer,
+                              index1 = TRUE)
+# generate predictions for every user/beer combo
+pred$rating &lt;- r$predict(prediction_set, out_memory())
+saveRDS(pred, &quot;beer_reco_predictions.RDS&quot;)</code></pre>
+<p>The model runs through 20 iterations and the RMSE is still dropping. You can really easily overfit this model. If you do 300 or even 400 latent factors the RMSE will continue to drop. In a full scale implementation, I would be using a training and testing set and/or cross validation to choose the number of latent factors that minimizes the RMSE on the test set. Here, I’m simply doing a proof of concept, so we are playing it a bit fast and loose.</p>
+<p>With the model trained and predictions precomputed for all users, I can select some users and examine the results. I built a couple helper functions to view the results. The first takes the prediction data frame and filters out the beers that user already reviewed then returns the top 3 beers predicted for them. The second function grabs the top 10 beers that that user already reviewed so we can compare and see if the results are sensible.</p>
+<pre class="r"><code>#Look into using &#39;here&#39; package for easier paths here
+predictions &lt;- readRDS(&quot;~/Playground/Playground/beer_reco_predictions.RDS&quot;)
+
+top_three_beers_for_user &lt;- function(preds = predictions, user_beer_sparse = user_beer_triplet, user_id = NULL){
+# inputs: 
+#       preds - precomputed predictions file with predictions for all users
+#       user_beer_sparse - user_beer matrix used to get beers specific user has tried
+#       user_id - specific user to recommend beers for; defaults to randomly selected user
+  
+  # Default to grabbing a random user_id. If specified, use given user_id
+  if (is.null(user_id)){
+    user &lt;- sample.int(n_distinct(user_beer_sparse$beer_id), 1)
+  } else{
+    stopifnot(is.numeric(user_id))
+    stopifnot(user_id != 0)
+    user &lt;- user_id
+  }
+  # df of beers the specific user has reviewed
+  users_beers &lt;- user_beer_sparse %&gt;%
+    filter(user_id %in% user)
+  # return top three beers by predicted rating
+  # remove predictions for beers user already reviewed
+  preds %&gt;%
+    filter(user == user_id, !(beer %in% users_beers$beer_id))%&gt;%
+    arrange(desc(rating))%&gt;%
+    # this join allows me to get the beer name, style and brewery name
+    # the prediction df is just id numbers and a rating prediction
+    inner_join((over_50_reviews%&gt;%
+                 distinct(beer_id, .keep_all = TRUE)%&gt;%
+                  select(beer_id, beer_name, beer_style)), by = c(&quot;beer&quot; = &quot;beer_id&quot;))%&gt;%
+    top_n(3, rating)%&gt;%
+    select(-rating, -beer)%&gt;%
+    formattable::formattable()
+}
+
+users_top_rated_beers &lt;- function(df = over_50_reviews, user = NULL){
+  # function takes a specific user_id and returns the style, name and rating of their top 10(ties included) beers
+  df%&gt;%
+    filter(user_id == user)%&gt;%
+    select(user_id, beer_id, beer_name, beer_style, review_overall)%&gt;%
+    top_n(10, review_overall)%&gt;%
+    arrange(desc(review_overall))%&gt;%
+    select(-review_overall, -beer_id)%&gt;%
+    formattable::formattable()
+}</code></pre>
+<p>Looking at the predictions for two random reviewers in the dataset, you can see that, as expected, they are given different recommendations. User 3831 is recommended an English Bitter, a Red Ale and a Rye which seems to make sense since they have a Rye and a couple Red Ales in their highest rated beers.</p>
+<pre class="r"><code>top_three_beers_for_user(user_id = 3831)</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+user
+</th>
+<th style="text-align:right;">
+beer_name
+</th>
+<th style="text-align:right;">
+beer_style
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Bluebird Bitter
+</td>
+<td style="text-align:right;">
+English Bitter
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Ommegang Rouge
+</td>
+<td style="text-align:right;">
+Flanders Red Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Founders Red’s Rye PA
+</td>
+<td style="text-align:right;">
+Rye Beer
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>users_top_rated_beers(user = 3831)</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+user_id
+</th>
+<th style="text-align:right;">
+beer_name
+</th>
+<th style="text-align:right;">
+beer_style
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Sierra Nevada Bigfoot Barleywine Style Ale
+</td>
+<td style="text-align:right;">
+American Barleywine
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+High Tide Fresh Hop IPA
+</td>
+<td style="text-align:right;">
+American IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Red Rocket Ale
+</td>
+<td style="text-align:right;">
+American Amber / Red Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Green Flash Le Freak
+</td>
+<td style="text-align:right;">
+Belgian IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+DuganA IPA
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Righteous Ale
+</td>
+<td style="text-align:right;">
+Rye Beer
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Duck-Rabbit Amber Ale
+</td>
+<td style="text-align:right;">
+American Amber / Red Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Oaked Arrogant Bastard Ale
+</td>
+<td style="text-align:right;">
+American Strong Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Third Coast Old Ale
+</td>
+<td style="text-align:right;">
+American Barleywine
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Philadelphia Pale Ale
+</td>
+<td style="text-align:right;">
+American Pale Ale (APA)
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+PILZILLA
+</td>
+<td style="text-align:right;">
+Keller Bier / Zwickel Bier
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Festbier
+</td>
+<td style="text-align:right;">
+Märzen / Oktoberfest
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+3831
+</td>
+<td style="text-align:right;">
+Prima Pils
+</td>
+<td style="text-align:right;">
+German Pilsener
+</td>
+</tr>
+</tbody>
+</table>
+<p>User 270 was recommended an Imperial IPA, a Wild Ale and a Hefeweizen. This again makes since as you can see they rate <em>many</em> Imperial IPA’s highly. The recommender is also picking up that user 270 seems to like fruit forward beers–the Wild Ale and the Wisconsin Belgian Red are both fruit forward. It might even be picking up on the fact that beer drinkers who like Witbier’s and Wheat Ale’s tend to like Hefeweizens. It’s pretty remarkable what a well tuned recommender system can predict and even the simple one here seems to do a pretty good job of generating reasonable recommendations for the top 3 beers for a particular reviewer.</p>
+<pre class="r"><code>top_three_beers_for_user(user_id = 270)</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+user
+</th>
+<th style="text-align:right;">
+beer_name
+</th>
+<th style="text-align:right;">
+beer_style
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Citra DIPA
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Deviation - Bottleworks 9th Anniversary
+</td>
+<td style="text-align:right;">
+American Wild Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Weihenstephaner Hefeweissbier
+</td>
+<td style="text-align:right;">
+Hefeweizen
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>users_top_rated_beers(user = 270)</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+user_id
+</th>
+<th style="text-align:right;">
+beer_name
+</th>
+<th style="text-align:right;">
+beer_style
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Tröegs Hopback Amber Ale
+</td>
+<td style="text-align:right;">
+American Amber / Red Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Bitter Brewer
+</td>
+<td style="text-align:right;">
+English Bitter
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Furious
+</td>
+<td style="text-align:right;">
+American IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Bell’s Hopslam Ale
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Dreadnaught IPA
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Hop Rod Rye
+</td>
+<td style="text-align:right;">
+Rye Beer
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+1554 Enlightened Black Ale
+</td>
+<td style="text-align:right;">
+Belgian Dark Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Chimay Première (Red)
+</td>
+<td style="text-align:right;">
+Dubbel
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Longshot Blackened Hops
+</td>
+<td style="text-align:right;">
+American Black Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Point Cascade Pale Ale
+</td>
+<td style="text-align:right;">
+American Pale Ale (APA)
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Wisconsin Belgian Red
+</td>
+<td style="text-align:right;">
+Fruit / Vegetable Beer
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Samuel Smith’s, The Famous Taddy Porter
+</td>
+<td style="text-align:right;">
+English Porter
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Summit Oktoberfest Marzen
+</td>
+<td style="text-align:right;">
+Märzen / Oktoberfest
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Hazed &amp; Infused
+</td>
+<td style="text-align:right;">
+American Pale Ale (APA)
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Red Racer IPA
+</td>
+<td style="text-align:right;">
+American IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Abrasive Ale
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Two Hearted Ale
+</td>
+<td style="text-align:right;">
+American IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Pliny The Elder
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+John’s Generations White Ale
+</td>
+<td style="text-align:right;">
+Witbier
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+A Little Sumpin’ Sumpin’ Ale
+</td>
+<td style="text-align:right;">
+American Pale Wheat Ale
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+270
+</td>
+<td style="text-align:right;">
+Illumination Double IPA
+</td>
+<td style="text-align:right;">
+American Double / Imperial IPA
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="which-of-the-factorsaroma-taste-appearance-palette-are-most-important-in-determining-the-overall-quality-of-the-beer" class="section level2">
+<h2>Which of the factors(aroma, taste, appearance, palette) are most important in determining the overall quality of the beer?</h2>
+<p>This is another fun question because–yet again–there are a lot of different ways you could reason about finding an answer. Initially, I wanted to use PCA. I figured I could use it to see which factor most closely corresponded to the first principle component–which is where, by definition, most of the variance occurs. But after thinking it over some more, I decided not to use this approach. Typically PCA is used when you have a lot of variables that are in play. Here, I’m only really looking at 4. While I think you could cast the problem in a way to ‘use’ PCA, I don’t know that it’s the good approach, so I’m using other techniques here. I’d love to see how someone would approach this problem using PCA though, so if you get a hankering to do that, please shoot me a link to your analysis in the comments!</p>
+<p>Instead of PCA, I’m going to do two things:</p>
+<ol style="list-style-type: decimal">
+<li>Examine the correlations between the subfactors(taste, palette, aroma, appearance) and the overall review scores</li>
+<li>Fit a linear model and see which factors are most important to the model.</li>
+</ol>
+<div id="theyre-correlated-you-say" class="section level4">
+<h4>They’re correlated you say?</h4>
+<pre class="r"><code>library(corrr)
+cor_results &lt;- reviews_raw %&gt;%
+  select(review_appearance, review_aroma, review_palate, review_taste, review_overall)%&gt;%
+  correlate()
+
+cor_results%&gt;%
+  shave()%&gt;%
+  rplot(shape = 15, colors = viridis::plasma(n = 6))</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/subfactors-correlation-analysis-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>cor_results%&gt;%
+  # shave and fashion prune the results to a triangular table since values are mirrored
+  shave()%&gt;%
+  fashion()%&gt;%
+  formattable::formattable()</code></pre>
+<table class="table table-condensed">
+<thead>
+<tr>
+<th style="text-align:right;">
+rowname
+</th>
+<th style="text-align:right;">
+review_appearance
+</th>
+<th style="text-align:right;">
+review_aroma
+</th>
+<th style="text-align:right;">
+review_palate
+</th>
+<th style="text-align:right;">
+review_taste
+</th>
+<th style="text-align:right;">
+review_overall
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+review_appearance
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+review_aroma
+</td>
+<td style="text-align:right;">
+.56
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+review_palate
+</td>
+<td style="text-align:right;">
+.57
+</td>
+<td style="text-align:right;">
+.62
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+review_taste
+</td>
+<td style="text-align:right;">
+.55
+</td>
+<td style="text-align:right;">
+.72
+</td>
+<td style="text-align:right;">
+.73
+</td>
+<td style="text-align:right;">
+</td>
+<td style="text-align:right;">
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+review_overall
+</td>
+<td style="text-align:right;">
+.50
+</td>
+<td style="text-align:right;">
+.62
+</td>
+<td style="text-align:right;">
+.70
+</td>
+<td style="text-align:right;">
+.79
+</td>
+<td style="text-align:right;">
+</td>
+</tr>
+</tbody>
+</table>
+<p>The highest correlations appear between taste and overall and palate and overall. Intuitively this makes sense–how a beer tastes probably plays a pretty big role in how the beer is scored overall. Aroma and appearance are relatively unimportant it seems, but it’s important to note that aroma is highly correlated with taste–after all, smell plays a huge role in how we perceive food–so aroma may be undervalued by this metric.</p>
+<p>This scatterplot shows the relationship of appearance/taste/etc to overall scores. You can see how taste is much more tightly clustered(thus the higher correlation), while the others are quite a bit more spread out.</p>
+<pre class="r"><code>reviews_raw%&gt;%
+  select(review_overall, review_aroma, review_appearance, review_taste, review_palate)%&gt;%
+  # remove reviews with zeros
+  filter(review_overall &gt; 0)%&gt;%
+  # plotting 1.5M reviews takes too long and you get the same idea with 1,500 points
+  sample_frac(size = .001)%&gt;%
+  rename(Aroma = review_aroma, Appearance = review_appearance, Taste = review_taste, Palate = review_palate)%&gt;%
+  # gather so I can use a facet plot
+  gather(key, value, -review_overall)%&gt;%
+  ggplot(aes(x = value, y = review_overall, alpha = .1))+
+  geom_point()+
+  # without jitter it just looks like a grid since values are discrete
+  geom_jitter()+
+  facet_wrap(~key, scales = &quot;free_x&quot;)+
+  # fits a linear model of review_overall ~ Appearance/taste/etc
+  geom_smooth(method = &quot;lm&quot;, se = TRUE, color = &#39;red&#39;)+
+  theme(legend.position = &#39;none&#39;)+
+  labs(x = &quot;&quot;,
+       y = &quot;Overall Score&quot;,
+       title = &quot;How Appearance, Aroma, Palate and Taste Affect Overall Beer Scores&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/subfactor-scatterplot-with-lm-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+</div>
+<div id="linear-model-for-feature-importance" class="section level4">
+<h4>Linear model for feature importance</h4>
+<p>This is useful, if not completely satisfying information. Maybe we can glean a little more insight by building a linear model to see how things line up. There are a ton of more sophisticated linear models and R packages we could use here, but the base <strong>lm</strong> function is quick, easy, and will more than suffice for what I’m doing here.</p>
+<pre class="r"><code># get rid of 7 reviews that are zero for some reason--pretty sure it&#39;s supposed to be 1-5
+reviews_zeros_removed &lt;- reviews_raw %&gt;%
+  select(review_overall, review_aroma, review_appearance, review_taste, review_palate)%&gt;%
+  filter(review_overall &gt; 0)
+
+# Build simple linear model with no interaction effects
+m1 &lt;- lm(review_overall~ review_taste + review_aroma + review_appearance + review_palate, data = reviews_zeros_removed)
+summary(m1)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = review_overall ~ review_taste + review_aroma + review_appearance + 
+##     review_palate, data = reviews_zeros_removed)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -3.8723 -0.2565 -0.0041  0.2441  3.6665 
+## 
+## Coefficients:
+##                    Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)       0.4399268  0.0023020  191.10   &lt;2e-16 ***
+## review_taste      0.5515190  0.0007770  709.82   &lt;2e-16 ***
+## review_aroma      0.0478437  0.0007234   66.14   &lt;2e-16 ***
+## review_appearance 0.0357500  0.0006998   51.08   &lt;2e-16 ***
+## review_palate     0.2585047  0.0007599  340.20   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 0.4213 on 1586602 degrees of freedom
+## Multiple R-squared:  0.6581, Adjusted R-squared:  0.6581 
+## F-statistic: 7.636e+05 on 4 and 1586602 DF,  p-value: &lt; 2.2e-16</code></pre>
+<p>This linear model is predicting review_overall from the sub-reviews–taste, aroma, appearance and palate. With an R-squared of just .658, this model isn’t super accurate, but it’s good enough for our purposes.<a href="#fn2" class="footnoteRef" id="fnref2"><sup>2</sup></a> I just want to see which factor is most important to the overall review score after all. It’s tempting to just look at the coefficient values and say whichever is larger is more important, but that’s <a href="https://stats.stackexchange.com/a/202846">not really true</a>. Variables on different scales, variables with wildly different variances or multi-collinearity between variables will all make determining feature importance from the coefficient values problematic(if not outright wrong).</p>
+<p>Luckily, some very smart statisticians built a package called <a href="https://cran.r-project.org/web/packages/relaimpo/relaimpo.pdf"><strong>relaimpo</strong></a> that will calculate more useful feature importance metrics. It turns out this is a really slippery and complicated area of statistics, so I’d encourage you to read about it <a href="https://prof.beuth-hochschule.de/fileadmin/prof/groemp/downloads/amstat07mayp139.pdf">here</a> if you’d like to see how a statistician thinks about this area. There are 8 different metrics you can use in <em>relaimpo</em>, but they all basically give the same answer. I’ve included 5 below(<em>lmg</em> and <em>betasq</em> seem to be the most commonly used metrics) and you can see that each metric under ‘Relative importance metrics’ gives the same breakdown of feature importance:</p>
+<ol style="list-style-type: decimal">
+<li>Taste</li>
+<li>Palate</li>
+<li>Aroma</li>
+<li>Appearance</li>
+</ol>
+<pre class="r"><code># calc.relimp calculates several measures that give the relative importance of the variables in a model.
+metrics &lt;- calc.relimp(m1, type = c(&quot;lmg&quot;, &quot;first&quot;, &quot;last&quot;, &quot;betasq&quot;, &quot;car&quot;))
+metrics</code></pre>
+<pre><code>## Response variable: review_overall 
+## Total response variance: 0.5192339 
+## Analysis based on 1586607 observations 
+## 
+## 4 Regressors: 
+## review_taste review_aroma review_appearance review_palate 
+## Proportion of variance explained by model: 65.81%
+## Metrics are not normalized (rela=FALSE). 
+## 
+## Relative importance metrics: 
+## 
+##                          lmg         last     first       betasq
+## review_taste      0.28889505 0.1085608974 0.6238184 0.3138592744
+## review_aroma      0.11738736 0.0009425892 0.3794776 0.0021454358
+## review_appearance 0.06859918 0.0005622868 0.2516635 0.0009341328
+## review_palate     0.18325632 0.0249380132 0.4926922 0.0598984664
+##                          car
+## review_taste      0.33941105
+## review_aroma      0.08843677
+## review_appearance 0.04832851
+## review_palate     0.18196159
+## 
+## Average coefficients for different model sizes: 
+## 
+##                          1X       2Xs        3Xs        4Xs
+## review_taste      0.7775389 0.6717731 0.60371696 0.55151900
+## review_aroma      0.6362978 0.3051504 0.13827614 0.04784375
+## review_appearance 0.5867889 0.1872267 0.07416628 0.03575000
+## review_palate     0.7413930 0.4927871 0.35193831 0.25850473</code></pre>
+<p>There is quite a bit of difference in how <em>much</em> more important taste is compared to appearance, but the ranking is the same regardless of the metric used–<strong>taste</strong> is most important in determining the overall review of a beer and appearance is least important.</p>
+</div>
+</div>
+<div id="if-i-enjoy-a-beer-due-to-its-aroma-and-appearance-which-beer-style-should-i-try" class="section level2">
+<h2>If I enjoy a beer due to its aroma and appearance, which beer style should I try?</h2>
+<p>So what if we aren’t the typical beer drinker and what we really care about is the aroma and appearance of a beer. How should I determine what to drink then? I think a simple approach is appropriate for this question. If a beer drinker has a strong preference for beers that are very aromatic and richly colored, then they should like beer styles that score highly in the review_aroma and review_appearance variables.</p>
+<p>For the graph below I grouped by the style of beer and then averaged the aroma and appearance scores. Additionally, I took the average of the aroma and appearance to get a sense of the total ‘smell and sight’ score.</p>
+<pre class="r"><code>aroma_and_appearance &lt;- reviews_raw %&gt;%
+  filter(!is.na(brewery_name))%&gt;%
+  group_by(beer_style)%&gt;%
+  # group by style and then take average of aroma, appearance and overall
+  summarise(reviews = n(),
+            avg_aroma = mean(review_aroma),
+            avg_appearance = mean(review_appearance),
+            avg_overall = mean(review_overall))%&gt;%
+  ungroup()%&gt;%
+  # use the average aroma and appearance scores for each style and take the average of the two to have an aroma+appearance score
+  mutate(avg_aroma_appear = (avg_aroma + avg_appearance)/2)
+
+# ggalt let&#39;s me use the geom_dumbbell geom.
+library(ggalt)
+aroma_and_appearance %&gt;%
+  mutate(beer_style = fct_reorder(beer_style, avg_aroma_appear))%&gt;%
+  top_n(25, avg_aroma_appear)%&gt;%
+  select(-avg_overall)%&gt;%
+  ggplot(aes(y = beer_style))+
+  geom_point(aes(x = avg_aroma_appear),size = 3, alpha = .8)+
+  # dumbbell needs both the left and right dots specified: use x and xend 
+  geom_dumbbell(aes(x = avg_aroma, xend = avg_appearance),
+                size_x = 2.5,
+                size_xend = 2.5,
+                colour_x = &quot;#D55E00&quot;,
+                colour_xend = &quot;#0072B2&quot;,
+                alpha = .5,
+                size = .75)+
+  # identifying Aroma, appearance and avg score on plot for better visibility
+  geom_text(data = data.frame(),
+            aes(x = 4.15, y = &quot;American Double / Imperial Stout&quot;, label = &quot;Aroma&quot;),
+            color = &quot;#D55E00&quot;,
+            nudge_y = .1,
+            nudge_x = -.01,
+            fontface = &#39;italic&#39;,
+            size = 2.5)+
+  geom_text(data = data.frame(),
+            aes(x = 4.18, y = &quot;American Double / Imperial Stout&quot;, label = &quot;Appearance&quot;),
+            color = &quot;#0072B2&quot;,
+            nudge_y = .1,
+            nudge_x = .015,
+            fontface = &#39;italic&#39;,
+            size = 2.5)+
+  geom_text(data = data.frame(),
+            aes(x = 4.14, y = &quot;Russian Imperial Stout&quot;, label = &quot;Average of Aroma &amp; Appearance&quot;),
+            color = &quot;black&quot;,
+            nudge_y = .52,
+            #nudge_x = -.01,
+            fontface = &#39;italic&#39;,
+            size = 2)+
+  labs(x = &quot;Average Rating&quot;,
+       y = &quot;&quot;,
+       color = &quot;&quot;,
+       title = &quot;Which Beer Styles Receive the Highest Aroma and Appearance Ratings?&quot;,
+       subtitle = &quot;Ordered by the Average of a Styles Average Aroma and Appearance Ratings&quot;)+
+  my_theme_tweaks()  </code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/top-aroma-appearance-styles-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>As a beer lover, this plot doesn’t surprise me much. Imperial Stouts are known for being highly aromatic and have a beautiful chocolate/ruby color that reviewers seem to like. If I’m just recommending one style, it’s probably be the <strong>American Double/Imperial Stout</strong> because it has high aroma and appearance scores, while the Russian Imperial Stout has the highest appearance score, but a slightly lower aroma score.</p>
+<p>This graphic could also be useful if you care slightly more about, say, the aroma of a beer. You’d just try the styles with the aroma dots on the right side of the dumbbell plot – Quads, Imperial IPAs, Gueuzes, Wild Ales, or Eisbocks perhaps.</p>
+<div id="wrapup" class="section level3">
+<h3>Wrapup</h3>
+<p>This was a really fun dataset to play around with, and I have to say I completely agree with Tanya Cashorali when she says this sort of take home test is a great way to interview data science job candidates. There’s a lot of flexibility in how you perform the analysis and I think you get a good idea of what someone is capable of and how they reason about solving actual problems.</p>
+<p>As usual, the full code for this report can be found <a href="https://github.com/Grollus/DataBlog/tree/master/content/post">here</a> and thanks for reading!</p>
+</div>
+<div id="code-appendix" class="section level3">
+<h3>Code Appendix</h3>
+<p>This section includes additional code that was used–mainly to explore the data–but that didn’t make it past the cutting stage of report writing. It’s included because it’s interesting, if not directly relevant to the analysis.</p>
+<div id="app.-a" class="section level4">
+<h4>App. A</h4>
+<pre class="r"><code>library(dplyr)
+# A look at how often beers from the &#39;macro&#39; breweries are reviewed
+reviews_raw%&gt;%
+  filter(brewery_name %in% c(&quot;Anheuser-Busch&quot;, &quot;Coors Brewing Company&quot;, &quot;Miller Brewing Co.&quot;, &quot;Heineken Nederland B.V.&quot;))%&gt;%
+  count(brewery_id, brewery_name, sort = TRUE)</code></pre>
+<pre><code>## # A tibble: 4 x 3
+##   brewery_id brewery_name                n
+##        &lt;dbl&gt; &lt;chr&gt;                   &lt;int&gt;
+## 1         29 Anheuser-Busch          15815
+## 2        306 Coors Brewing Company    7198
+## 3        105 Miller Brewing Co.       5616
+## 4         81 Heineken Nederland B.V.  1853</code></pre>
+</div>
+<div id="app.-b" class="section level4">
+<h4>App. B</h4>
+<pre class="r"><code># Plotting distribution of 5 different review categories
+reviews_zeros_removed %&gt;%
+  select(starts_with(&#39;review&#39;))%&gt;%
+  gather(review_type, score)%&gt;%
+  ggplot(aes(score))+
+  geom_histogram()+
+  facet_wrap(~review_type)+
+  scale_y_continuous(labels = number_format(), limits = c(0, 700000), expand = c(0, 0))+
+  labs(y = &quot;&quot;,
+       x = &quot;Score&quot;,
+       title = &quot;Distribution of Review Scores&quot;,
+       subtitle = &quot;Scores all have similar shapes, though Appearance may be a tad narrower&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/code-appendix-b-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+</div>
+<div id="app.-c" class="section level4">
+<h4>App. C</h4>
+<pre class="r"><code># A look at percentage of a breweries beers above 15% ABV
+beers_above_fifteen_perc &lt;- reviews_raw %&gt;%
+  filter(!is.na(beer_abv), !is.na(brewery_name))%&gt;%
+  #alter the brewery name again like above to uniquely identify those duplicate brewery names
+  mutate(brewery_name = ifelse(brewery_name %in% duplicate_names$brewery_name, paste0(brewery_name, &quot;(&quot;, brewery_id, &quot;)&quot;),
+                               brewery_name))%&gt;%
+  distinct(brewery_name,
+           beer_name,
+           .keep_all = TRUE)%&gt;%
+  group_by(brewery_name)%&gt;%
+  summarise(beers = n(),
+            beers_above_15 = sum(beer_abv &gt;=15),
+            per_abv_15= beers_above_15/beers)
+
+beers_above_fifteen_perc%&gt;%
+  filter(beers &gt;= 10)%&gt;%
+  mutate(brewery_name = fct_reorder(brewery_name, per_abv_15))%&gt;%
+  top_n(25, per_abv_15)%&gt;%
+  ggplot(aes(per_abv_15, brewery_name))+
+  geom_point()+
+  scale_x_continuous(labels = percent_format())+
+  expand_limits(x = .02)+
+  labs(x = &quot;Percentage of Beers Above 15% ABV&quot;,
+       y = &quot;&quot;,
+       title = &quot;Percentage of Breweries Beers which are greater than 15% ABV&quot;,
+       subtitle = &quot;For breweries producing more than 10 different beers&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/code-appendix-c-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+</div>
+<div id="app.-d" class="section level4">
+<h4>App. D</h4>
+<pre class="r"><code>aroma_and_appearance %&gt;%
+  mutate(beer_style = fct_reorder(beer_style, avg_aroma_appear))%&gt;%
+  top_n(25, avg_aroma_appear)%&gt;%
+  select(-avg_overall)%&gt;%
+  gather(key, value, -beer_style, -reviews)%&gt;%
+  ggplot(aes(x = value, y = beer_style, color = key, size = reviews, alpha = .3))+
+  geom_point()+
+  guides(size = FALSE,
+         alpha = FALSE,
+         color = guide_legend(override.aes = list(size = 4,
+                                                  alpha = .4)))+
+  theme(legend.position = c(.86, .26))+
+  labs(x = &quot;Average Rating&quot;,
+       y = &quot;&quot;,
+       color = &quot;&quot;,
+       title = &quot;Which Beer Styles Receive the Highest Aroma and Appearance Ratings?&quot;,
+       subtitle = &quot;Ordered by the Average of a Styles Average Aroma and Appearance Ratings\n(Larger Points equal more reviews)&quot;)+
+  my_theme_tweaks()</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/code-appendix-d-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+</div>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>How many macro brews are reviewed in the dataset? App. A<a href="#fnref1">↩</a></p></li>
+<li id="fn2"><p>I did explore including interaction effects in the model, but they didn’t provide much improvement and they make determining feature importance a little more difficult. Ultimately I decided to ignore them.<a href="#fnref2">↩</a></p></li>
+</ol>
+</div>
