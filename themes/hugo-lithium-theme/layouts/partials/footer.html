@@ -7,11 +7,24 @@
             <a href="https://gohugo.io/" class="footer-links-kudos">Made with <img src="{{ "images/hugo-logo.png" | relURL }}" width="22" height="22"></a>
           </li>
         </ul>
+        {{ if and (not .Site.Params.disable_codefolding) (not .Params.disable_codefolding) (in (string .Content) "</pre>") }} 
+        <script>
+        $(document).ready(function () {
+          window.initializeCodeFolding("show" === {{ if isset .Params "codefolding_show" }}{{ .Params.codefolding_show }}{{ else }}{{ default ("hide") .Site.Params.codefolding_show }}{{ end }});
+        });
+        </script>
+        <script src="{{ "js/codefolding.js" | relURL }}"></script>
+        {{ end }}
       </footer>
 
     </div>
     {{ partial "footer_highlightjs" . }}
     {{ partial "footer_mathjax" . }}
+    {{ if not .Site.Params.disable_codefolding }}
+      <script src="{{ "js/collapse.js" | relURL }}"></script>
+      <script src="{{ "js/dropdown.js" | relURL }}"></script>
+      <script src="{{ "js/transition.js" | relURL }}"></script>
+    {{ end }}
     {{ template "_internal/google_analytics.html" . }}
   </body>
 </html>

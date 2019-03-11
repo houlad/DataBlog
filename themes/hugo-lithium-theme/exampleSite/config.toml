@@ -38,3 +38,7 @@ ignoreFiles = ["\\.Rmd$", "_files$", "_cache$"]
     height = 50
     alt = "Logo"
 
+    # Set to true to disable code folding
+    disable_codefolding = false
+    # Set to "hide" or "show" all codes by default
+    codefolding_show = "hide"
