@@ -80,7 +80,7 @@ good to identify biases in your dataset as you recognize them.
 [^1]: How many macro brews are reviewed in the dataset? App. A
 
 ### Most Reviewed Breweries
-```{r, most-reviewed-breweries}
+```{r, most-reviewed-breweries, echo = FALSE}
 # 5840 different breweries represented in the dataset: Sam Adams the largest
 reviews_raw%>%
   count(brewery_id, brewery_name, sort = TRUE)%>%
@@ -91,7 +91,7 @@ reviews_raw%>%
 
 
 ### Most Reviewed Beers
-```{r, most-reviewed-beers}
+```{r, most-reviewed-beers, echo = FALSE}
 #  66055 different beers reviewed. Lots of Stone, Sierra Nevada representation
 reviews_raw%>%
   count(beer_beerid, beer_name, brewery_name, sort = TRUE)%>%
@@ -192,7 +192,7 @@ beers_per_brewery %>%
 As a final exploratory question, I want to examine how the different styles of beer fare. Are some considerably more popular? Or are some just better? Are some styles really consistent--ie you see very little variance in how it's rated? I really have no idea, but these seem important if I want to recommend a beer style in question four.
 
 First, there are 104 different styles of beer represented in the dataset. As you can see, several styles are **really** popular, while others are quite uncommon.
-```{r, beer-styles}
+```{r, beer-styles, echo = FALSE}
 # 104 styles of beer(some seem very close to the same thing)
 reviews_raw%>%
   count(beer_style, sort = TRUE)%>%
@@ -210,7 +210,7 @@ I think it could be useful to know what effect the style of beer has on the over
 Looking at the top 5 and bottom 5 scoring styles, it's pretty shocking how different their average scores are. Is it really that
 difficult to make a delicious Light Lager? Or on the flip side, are Quads that easy to make--or do humans just love the taste of them? Who knows, but I know I want to dive a tiny bit deeper to see how much variance there is in the reviews of each style of beer. Maybe it's possible to get a good Light Lager, but there are a host of bad ones out there dragging down the average score.
 
-```{r, top-and-bottom-five}
+```{r, top-and-bottom-five, echo = FALSE}
 # Looking at how average score varies by style of beer.
 avg_score_by_style <- reviews_raw%>%
   group_by(beer_style)%>%
@@ -307,7 +307,7 @@ were to pick a random Imperial Stout/Barleywine/American IPA, you could be prett
 
 The bottom part of the style list is interesting not for the styles on it, but for how much more variance there is. Be careful to look at the x-axis labels here(since they are a little misleading compared to the top styles graph), because there's actually a lot more variance in how good or bad these beers are. Many of these styles have confidence intervals .2-.3 points wide, whereas the top styles were rarely over .1 points wide. English Strong Ales, for example, have a 95% confidence interval from `r round(beer_style_conf_int[beer_style_conf_int$beer_style == "English Strong Ale",]$conf.low, 2)` - `r round(beer_style_conf_int[beer_style_conf_int$beer_style == "English Strong Ale",]$conf.high, 2)`. This means it's possible that a English Strong Ale is rated as highly as a beer on the top 20 beer styles graph. But it also means that there are a lot of English Strong Ales that are merely OK. Simply put, there's more variance in the reviews of that style of beer.
 
-```{r bottom-20-beer-styles}
+```{r bottom-20-beer-styles, echo = FALSE}
 beer_style_conf_int%>%
   mutate(beer_style = fct_reorder(beer_style, estimate))%>%
   top_n(-20, estimate)%>%
@@ -370,7 +370,7 @@ The results are pretty similar to the other approach with some small differences
 
 Essentially though, the information present is the same. Reviewers love stouts, belgian ales, sours and IPAs and they tend to dislike lagers and light beers.
 
-```{r, bottom-styles-all-beers-approach}
+```{r, bottom-styles-all-beers-approach, echo = FALSE}
 beer_style_conf_int_by_reviewid%>%
   mutate(beer_style = fct_reorder(beer_style, estimate))%>%
   top_n(-20, estimate)%>%
@@ -390,7 +390,7 @@ beer_style_conf_int_by_reviewid%>%
 
 ## Which brewery produces the strongest beers by ABV%?
 With a better handle on the dataset, now I can actually address the question! First things first, there are `r scales::comma(sum(is.na(reviews_raw$beer_abv)))` reviews with no ABV data so we need to remove that data. It's only `r scales::percent(sum(is.na(reviews_raw$beer_abv))/nrow(reviews_raw))` of all reviews, so for the time being I'm not going to worry about just removing those reviews. Now the question is--what *is* a strong beer anyway? You can see from the histogram of the distribution of ABV's that the vast majority of beers are under 10% ABV. Only 18 beers out of over 66,000! are over 20% ABV.
-```{r, beer-abv-exploration}
+```{r, beer-abv-exploration, echo = FALSE}
 # Looking at beer abv; removing reviews with missing abv(about 67k)
 reviews_raw %>%
   filter(!is.na(beer_abv))%>%
@@ -416,7 +416,7 @@ reviews_raw%>%
 
 If I divide the data into reviews of beers > 20% ABV and those < 20% ABV, it's easier to see how uncommon reviews for really high ABV beers are. 
 
-```{r, greater-20-abv-distribution}
+```{r, greater-20-abv-distribution, echo = FALSE}
 reviews_raw%>%
   filter(!is.na(beer_abv), beer_abv > 20)%>%
   ggplot(aes(beer_abv))+
@@ -431,7 +431,7 @@ reviews_raw%>%
 
 The vast majority of beers reviewed fall right around the 5-6% range.
 
-```{r, less-20, abv distribution}
+```{r, less-20, abv distribution, echo = FALSE}
 # Most beers hoover around the 5% range which isn't surprising as a beer drinker
 reviews_raw %>%
   filter(!is.na(beer_abv), beer_abv < 20)%>%
@@ -516,7 +516,7 @@ average_abv %>%
 ```
 
 
-```{r, median-mean-beer-calculation}
+```{r, median-mean-beer-calculation, echo = FALSE}
 mean_median_beerabv <- reviews_raw %>%
   # remove reviews with missing abv
   filter(!is.na(beer_abv), !is.na(brewery_name))%>%
@@ -531,7 +531,7 @@ mean_median_beerabv <- reviews_raw %>%
 Now what if the brewery that produces the strongest beers is the one that has the highest proportion of its beers above some ABV threshold. We know the mean ABV for a beer is `r round(mean_median_beerabv$mean_abv, 2)`% (median `r round(mean_median_beerabv$median_abv, 2)`%). In fact, the 75th percentile for beer ABV is only `r round(mean_median_beerabv$q75, 2)`%. 10% is where I, personally, start to think a beer is strong and with only `r round(mean_median_beerabv$above_10, 2)`% of beers having greater than or equal to 10% ABV, I think it's a pretty reasonable mark of a 'strong' beer.
 
 
-```{r, strongest-beer-by-proportion-above-10}
+```{r, strongest-beer-by-proportion-above-10, echo = FALSE}
 beers_above_ten_perc <- reviews_raw %>%
   # should have done this filtering above once and then saved as new df instead of duplicating again
   filter(!is.na(beer_abv), !is.na(brewery_name))%>%
@@ -567,7 +567,7 @@ beers_above_ten_perc%>%
 Yet again, Schorschbräu sits at the top. They only make 10 different beers, but 90% of them are 10% ABV or higher! For a brewery that produces quite a few more beers, but still cranks out high ABV stuff, AleSmith Brewing Company is up there. They make over 50 different beers and over 70% of them are above 10% ABV.
 
 At the end of the day, Shorschbrau brewery seems to sit at the top of the 'strong' beer mountain--regardless of the metric I used. With a little googling, it seems they are well known for pushing the limits of strong beers. They even produce one that is 57% ABV!
-```{r}
+```{r, echo = FALSE}
 reviews_raw%>%
   filter(!is.na(beer_abv), brewery_name == "Schorschbräu")%>%
   distinct(beer_name, .keep_all = TRUE)%>%
@@ -588,7 +588,7 @@ The details of how you solve for these latent features algorithmically can be fo
 
 Luckily, there are several great packages in R that allow for easy implementation of matrix factorization. First, I need to do a bit of cleanup. Most reviewers don't review many beers and most beers don't get reviewed many times. We like a sparse matrix, but we don't gain a lot of information from reviewers that review one time or beers than are only reviewed one time. We need to only include reviewers and beers above some threshold.
 
-```{r, number-of-reviews-histogram}
+```{r, number-of-reviews-histogram, echo = FALSE}
 reviews_raw %>%
   count(review_profilename, sort = TRUE)%>%
   ggplot(aes(n))+
@@ -744,7 +744,7 @@ Instead of PCA, I'm going to do two things:
 #### They're correlated you say?
 
 
-```{r, subfactors-correlation-analysis}
+```{r, subfactors-correlation-analysis, echo = FALSE}
 library(corrr)
 cor_results <- reviews_raw %>%
   select(review_appearance, review_aroma, review_palate, review_taste, review_overall)%>%

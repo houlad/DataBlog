@@ -38,12 +38,6 @@ output:
 <p>First, I want to know a bit about who’s represented in the dataset. I can see that there are 5,840 breweries and 66,055 beers represented. The breweries with the most reviews are pretty familiar–Sam Adams, Sierra Nevada, Dogfish, Bells– but where are the ‘macro’ breweries? It seems that the beer advocate dataset is a picture of the craft brew beer scene and won’t necessarily be representative of all beer drinkers. After all, you have to be pretty ‘in’ to beer to post reviews online and find your way into this dataset. The big 3 American macro-breweries (Anheuser, Millers and Coors) <em>are</em> present in the data<a href="#fn1" class="footnoteRef" id="fnref1"><sup>1</sup></a>, but not sitting at the top with the most reviews like you might expect from the breweries that sell the most beer by <a href="https://www.forbes.com/sites/garystoller/2018/03/20/craft-breweries-dominate-the-top-50-but-guess-which-giants-rule-the-beer-market/#3c5064e6dcad">volume</a>. This isn’t particularly important for the questions being asked here, but it’s good to identify biases in your dataset as you recognize them.</p>
 <div id="most-reviewed-breweries" class="section level3">
 <h3>Most Reviewed Breweries</h3>
-<pre class="r"><code># 5840 different breweries represented in the dataset: Sam Adams the largest
-reviews_raw%&gt;%
-  count(brewery_id, brewery_name, sort = TRUE)%&gt;%
-  select(brewery_name, n)%&gt;%
-  head(8)%&gt;%
-  formattable::formattable()</code></pre>
 <table class="table table-condensed">
 <thead>
 <tr>
@@ -125,12 +119,6 @@ Victory Brewing Company
 </div>
 <div id="most-reviewed-beers" class="section level3">
 <h3>Most Reviewed Beers</h3>
-<pre class="r"><code>#  66055 different beers reviewed. Lots of Stone, Sierra Nevada representation
-reviews_raw%&gt;%
-  count(beer_beerid, beer_name, brewery_name, sort = TRUE)%&gt;%
-  select(beer_name, brewery_name, n)%&gt;%
-  head(8)%&gt;%
-  formattable::formattable()</code></pre>
 <table class="table table-condensed">
 <thead>
 <tr>
@@ -318,10 +306,6 @@ beers_per_brewery %&gt;%
 <h3>Does the Style of Beer Matter? You Bet it Does!</h3>
 <p>As a final exploratory question, I want to examine how the different styles of beer fare. Are some considerably more popular? Or are some just better? Are some styles really consistent–ie you see very little variance in how it’s rated? I really have no idea, but these seem important if I want to recommend a beer style in question four.</p>
 <p>First, there are 104 different styles of beer represented in the dataset. As you can see, several styles are <strong>really</strong> popular, while others are quite uncommon.</p>
-<pre class="r"><code># 104 styles of beer(some seem very close to the same thing)
-reviews_raw%&gt;%
-  count(beer_style, sort = TRUE)%&gt;%
-  head(5)</code></pre>
 <pre><code>## # A tibble: 5 x 2
 ##   beer_style                            n
 ##   &lt;chr&gt;                             &lt;int&gt;
@@ -330,10 +314,6 @@ reviews_raw%&gt;%
 ## 3 American Pale Ale (APA)           63469
 ## 4 Russian Imperial Stout            54129
 ## 5 American Double / Imperial Stout  50705</code></pre>
-<pre class="r"><code>reviews_raw %&gt;%
-  count(beer_style, sort = TRUE)%&gt;%
-  arrange(n)%&gt;%
-  head(5)</code></pre>
 <pre><code>## # A tibble: 5 x 2
 ##   beer_style     n
 ##   &lt;chr&gt;      &lt;int&gt;
@@ -344,22 +324,6 @@ reviews_raw%&gt;%
 ## 5 Gose         686</code></pre>
 <p>I think it could be useful to know what effect the style of beer has on the overall review score. Knowing a little bit about beer, I could see a situation where one style–let’s say Quadrupels(Quads)–are always highly rated, but another–maybe American Lagers–are generally rated very low. Just knowing the style of the beer might give us a lot of information about how that beer is going to be reviewed.</p>
 <p>Looking at the top 5 and bottom 5 scoring styles, it’s pretty shocking how different their average scores are. Is it really that difficult to make a delicious Light Lager? Or on the flip side, are Quads that easy to make–or do humans just love the taste of them? Who knows, but I know I want to dive a tiny bit deeper to see how much variance there is in the reviews of each style of beer. Maybe it’s possible to get a good Light Lager, but there are a host of bad ones out there dragging down the average score.</p>
-<pre class="r"><code># Looking at how average score varies by style of beer.
-avg_score_by_style &lt;- reviews_raw%&gt;%
-  group_by(beer_style)%&gt;%
-  summarise(avg_score = mean(review_overall),
-            reviews = n())%&gt;%
-  ungroup()%&gt;%
-  arrange(desc(avg_score))
-
-# Grab top 5 and bottom 5 and bind together in df
-top_5 &lt;- avg_score_by_style %&gt;%
-  top_n(5, avg_score)
-bottom_5 &lt;- avg_score_by_style%&gt;%
-  top_n(-5, avg_score)
-top_bottom_5 &lt;- bind_rows(top_5, bottom_5)
-
-formattable::formattable(top_bottom_5)</code></pre>
 <table class="table table-condensed">
 <thead>
 <tr>
@@ -553,21 +517,6 @@ beer_style_conf_int%&gt;%
 <p><img src="/post/beer-advocate-reviews_files/figure-html/top-20-styles-conf-int-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 <p>The top styles here don’t surprise me, but it’s very interesting to see which styles are more variable than others. If you were to pick a random Imperial Stout/Barleywine/American IPA, you could be pretty confident you know exactly how good of a beer you are going to get. But if you pick something like a Gueuze/Foreign Stout/Old Ale, there’s a bit more variation in how ‘good’ the beer is–it could be the best beer you’ve ever had or it could be OK.</p>
 <p>The bottom part of the style list is interesting not for the styles on it, but for how much more variance there is. Be careful to look at the x-axis labels here(since they are a little misleading compared to the top styles graph), because there’s actually a lot more variance in how good or bad these beers are. Many of these styles have confidence intervals .2-.3 points wide, whereas the top styles were rarely over .1 points wide. English Strong Ales, for example, have a 95% confidence interval from 3.59 - 3.83. This means it’s possible that a English Strong Ale is rated as highly as a beer on the top 20 beer styles graph. But it also means that there are a lot of English Strong Ales that are merely OK. Simply put, there’s more variance in the reviews of that style of beer.</p>
-<pre class="r"><code>beer_style_conf_int%&gt;%
-  mutate(beer_style = fct_reorder(beer_style, estimate))%&gt;%
-  top_n(-20, estimate)%&gt;%
-  ggplot(aes(estimate, beer_style))+
-  geom_point()+
-  geom_errorbarh(aes(xmin = conf.low,
-                     xmax = conf.high))+
-  # attempt to make the x-axis less deceptive when compared to the top 20 one above -- hard to do since bottom 20
-  # goes from 2.4-3.9 while top 20 is 3.8-4.2.
-  scale_x_continuous(limits = c(2.35, 3.9), breaks = seq(from = 2.4, to = 4, by = .1), expand = c(0,0))+
-  labs(x = &quot;Overall Review Score&quot;,
-       y = &quot;&quot;,
-       title = &quot;Bottom 20 Beer Styles&quot;,
-       subtitle = &quot;Estimated Review Score of Beer Styles with 95% Confidence Intervals&quot;)+
-  my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/bottom-20-beer-styles-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 </div>
 <div id="keep-all-the-beerswithin-reason" class="section level4">
@@ -609,46 +558,13 @@ beer_style_conf_int_by_reviewid%&gt;%
   my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/top-styles-all-beers-approach-1.png" width="90%" height="90%" style="display: block; margin: auto;" /> The results are pretty similar to the other approach with some small differences. First, the confidence intervals are narrower for both graphs. This is expected because of how I did the grouping. Instead of having, say, 100 beers to base the estimates off of, these graphs may use thousands of reviews–remember all those one review beers we filtered out before? With all that additional data, your confidence intervals <em>should</em> get narrower. Second, we see a handful of new styles present on each graph. Lambic - Unblended, Gose and Roggenbier all didn’t make the cut before, but are present now.</p>
 <p>Essentially though, the information present is the same. Reviewers love stouts, belgian ales, sours and IPAs and they tend to dislike lagers and light beers.</p>
-<pre class="r"><code>beer_style_conf_int_by_reviewid%&gt;%
-  mutate(beer_style = fct_reorder(beer_style, estimate))%&gt;%
-  top_n(-20, estimate)%&gt;%
-  ggplot(aes(estimate, beer_style))+
-  geom_point()+
-  geom_errorbarh(aes(xmin = conf.low,
-                     xmax = conf.high))+
-  labs(x = &quot;Overall Review Score&quot;,
-       y = &quot;&quot;,
-       title = &quot;Bottom 20 Beer Styles: No filtering to remove beers with few reviews&quot;,
-       subtitle = &quot;Estimated Review Score of Beer Styles with 95% Confidence Intervals&quot;)+
-  my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/bottom-styles-all-beers-approach-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 </div>
 </div>
 </div>
 <div id="which-brewery-produces-the-strongest-beers-by-abv" class="section level2">
 <h2>Which brewery produces the strongest beers by ABV%?</h2>
-<p>With a better handle on the dataset, now I can actually address the question! First things first, there are 67,785 reviews with no ABV data so we need to remove that data. It’s only 4.27% of all reviews, so for the time being I’m not going to worry about just removing those reviews. Now the question is–what <em>is</em> a strong beer anyway? You can see from the histogram of the distribution of ABV’s that the vast majority of beers are under 10% ABV. Only 18 beers out of over 66,000! are over 20% ABV.</p>
-<pre class="r"><code># Looking at beer abv; removing reviews with missing abv(about 67k)
-reviews_raw %&gt;%
-  filter(!is.na(beer_abv))%&gt;%
-  ggplot(aes(beer_abv))+
-  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
-  scale_y_continuous(labels = scales::comma_format(), expand = c(0,0))+
-  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;),
-                     expand = c(0,0),
-                     breaks = seq(from = 0, to = 60, by = 10))+
-  labs(x = &quot;ABV&quot;,
-       y = &quot;&quot;,
-       title = &quot;Distribution of Beer ABV %&quot;)+
-  my_theme_tweaks()</code></pre>
-<p><img src="/post/beer-advocate-reviews_files/figure-html/beer-abv-exploration-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
-<pre class="r"><code># Only 18 beers in the dataset are about 20% abv
-reviews_raw%&gt;%
-  filter(!is.na(beer_abv), beer_abv &gt; 20)%&gt;%
-  count(beer_name, beer_abv, brewery_name, beer_style, sort = TRUE)%&gt;%
-  select(-n)%&gt;%
-  arrange(desc(beer_abv))%&gt;%
-  formattable::formattable()</code></pre>
+With a better handle on the dataset, now I can actually address the question! First things first, there are 67,785 reviews with no ABV data so we need to remove that data. It’s only 4.27% of all reviews, so for the time being I’m not going to worry about just removing those reviews. Now the question is–what <em>is</em> a strong beer anyway? You can see from the histogram of the distribution of ABV’s that the vast majority of beers are under 10% ABV. Only 18 beers out of over 66,000! are over 20% ABV. <img src="/post/beer-advocate-reviews_files/figure-html/beer-abv-exploration-1.png" width="90%" height="90%" style="display: block; margin: auto;" />
 <table class="table table-condensed">
 <thead>
 <tr>
@@ -922,30 +838,8 @@ American Strong Ale
 </tbody>
 </table>
 <p>If I divide the data into reviews of beers &gt; 20% ABV and those &lt; 20% ABV, it’s easier to see how uncommon reviews for really high ABV beers are.</p>
-<pre class="r"><code>reviews_raw%&gt;%
-  filter(!is.na(beer_abv), beer_abv &gt; 20)%&gt;%
-  ggplot(aes(beer_abv))+
-  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
-  scale_y_continuous(labels = scales::comma_format(), expand = c(0,0))+
-  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;))+
-  labs(x = &quot;ABV&quot;,
-       y = &quot;&quot;,
-       title = &quot;Distribution of Beer ABV: Only beers &gt;20% ABV&quot;)+
-  my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/greater-20-abv-distribution-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 <p>The vast majority of beers reviewed fall right around the 5-6% range.</p>
-<pre class="r"><code># Most beers hoover around the 5% range which isn&#39;t surprising as a beer drinker
-reviews_raw %&gt;%
-  filter(!is.na(beer_abv), beer_abv &lt; 20)%&gt;%
-  ggplot(aes(beer_abv))+
-  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
-  scale_y_continuous(labels = scales::comma_format(), expand = c(0,0))+
-  scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;),
-                     expand = c(0,0))+
-  labs(x = &quot;ABV&quot;,
-       y = &quot;&quot;,
-       title = &quot;Distribution of Beer ABV: Only beers &lt;20% ABV&quot;)+
-  my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/less-20,%20abv%20distribution-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 <p>The question of which brewery produces the strongest beers by ABV has more nuance than it might appear. First, the question asks which brewery produces the strongest <strong>beers</strong> which I am taking to mean it needs to produce more than one beer. Second, how should I measure how strong a breweries beers are? An average of their ABVs? Maybe take the median? What about looking at the proportion of beers that a brewery produces that are above some ‘strong’ beer threshold? All these methods seem to have merit and are pretty simple and quick to perform. Let’s try them out and see what they tell us.</p>
 <p>After a bit of filtering, grouping and aggregation(which you can see in the code fold below), you can see that Schorschbräu ranks at the top of both the mean and median rankings. In fact, the top 4 on both graphs are the same–albeit with one positional swap. One note: Why did I only include breweries that make 4 or more beers? Because the median number of beers produced is 4 and that seemed reasonable.</p>
@@ -1011,55 +905,10 @@ average_abv %&gt;%
        subtitle = &quot;Only Breweries producing 4 or more different beers&quot;)+
   my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beers-by-mean-median-2.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
-<pre class="r"><code>mean_median_beerabv &lt;- reviews_raw %&gt;%
-  # remove reviews with missing abv
-  filter(!is.na(beer_abv), !is.na(brewery_name))%&gt;%
-  # don&#39;t want a weighted average, so we grab a df of unique beers for all breweries
-  distinct(brewery_id, beer_name, .keep_all = TRUE)%&gt;%
-  summarise(mean_abv = mean(beer_abv),
-            median_abv = median(beer_abv),
-            q75 = quantile(beer_abv, .75),
-            above_10 = (sum(beer_abv&gt;=10)/n())*100)</code></pre>
 <p>Now what if the brewery that produces the strongest beers is the one that has the highest proportion of its beers above some ABV threshold. We know the mean ABV for a beer is 6.27% (median 5.7%). In fact, the 75th percentile for beer ABV is only 7.2%. 10% is where I, personally, start to think a beer is strong and with only 6.51% of beers having greater than or equal to 10% ABV, I think it’s a pretty reasonable mark of a ‘strong’ beer.</p>
-<pre class="r"><code>beers_above_ten_perc &lt;- reviews_raw %&gt;%
-  # should have done this filtering above once and then saved as new df instead of duplicating again
-  filter(!is.na(beer_abv), !is.na(brewery_name))%&gt;%
-  #alter the brewery name like above to uniquely identify those duplicate brewery names
-  mutate(brewery_name = ifelse(brewery_name %in% duplicate_names$brewery_name, paste0(brewery_name, &quot;(&quot;, brewery_id, &quot;)&quot;),
-                               brewery_name))%&gt;%
-  separate(brewery_name, 
-           sep = &quot;/&quot;,
-           into = c(&quot;brewery_name&quot;, NA))%&gt;%
-  distinct(brewery_name,
-           beer_name,
-           .keep_all = TRUE)%&gt;%
-  group_by(brewery_name)%&gt;%
-  summarise(beers = n(),
-            beers_above_10 = sum(beer_abv &gt;=10),
-            per_abv_10 = beers_above_10/beers)
-
-beers_above_ten_perc%&gt;%
-  filter(beers &gt;= 4)%&gt;%
-  mutate(brewery_name = fct_reorder(brewery_name, per_abv_10))%&gt;%
-  top_n(10, per_abv_10)%&gt;%
-  ggplot(aes(per_abv_10, brewery_name))+
-  geom_point(color = &quot;#0072B2&quot;, alpha = .8, size = 4)+
-  scale_x_continuous(labels = percent_format())+
-  expand_limits(x = .3)+
-  labs(x = &quot;% of Beers Above 10% ABV&quot;,
-       y = &quot;&quot;,
-       title = &quot;What Percentage of Breweries Beers are &gt;10% ABV&quot;,
-       subtitle = &quot;For breweries producing 4 or more beers&quot;)+
-  my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beer-by-proportion-above-10-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 <p>Yet again, Schorschbräu sits at the top. They only make 10 different beers, but 90% of them are 10% ABV or higher! For a brewery that produces quite a few more beers, but still cranks out high ABV stuff, AleSmith Brewing Company is up there. They make over 50 different beers and over 70% of them are above 10% ABV.</p>
 <p>At the end of the day, Shorschbrau brewery seems to sit at the top of the ‘strong’ beer mountain–regardless of the metric I used. With a little googling, it seems they are well known for pushing the limits of strong beers. They even produce one that is 57% ABV!</p>
-<pre class="r"><code>reviews_raw%&gt;%
-  filter(!is.na(beer_abv), brewery_name == &quot;Schorschbräu&quot;)%&gt;%
-  distinct(beer_name, .keep_all = TRUE)%&gt;%
-  select(beer_name, beer_abv)%&gt;%
-  arrange(desc(beer_abv))%&gt;%
-  formattable::formattable()</code></pre>
 <table class="table table-condensed">
 <thead>
 <tr>
@@ -1162,15 +1011,6 @@ Schorschbräu Dunkles
 <p>It certainly seems pretty hand-wavy to say we just fill in some cells and use those values to recommend beers. How do you actually generate the predictions you might wonder? We do this by discovering the <em>latent features</em> that determine how a user rates items. The whole concept of matrix factorization works because we can take advantage of the fact that individuals don’t have 100% unique preferences. Our preferences are clustered. Maybe we like movies with a certain actress. Maybe we like a certain genre of movie. Or perhaps we like clothing from a certain designer or with a certain color palette. With beer, maybe we like beers of a certain style or beers that are extra hoppy. These are all things that could be latent features in a recommendation system. Using these latent features we can infer that if user1 and user2 both have a feature ‘Likes movies with Tom Hanks’, then a new movie with Tom Hanks will have a high predicted value for them.</p>
 <p>The details of how you solve for these latent features algorithmically can be found in the blog post I linked above(spoiler: you use gradient descent to solve for a user association matrix <strong>P</strong> and an item association matrix <strong>Q</strong>). For our purposes, it’s enough to think we are generating features of reviewers–reviewers that like bitter beers, reviewers that like chocolate stouts, reviewer that like beers from a certain area or of a certain ABV–and generating features for beers–beers that are high ABV, beers that are fruity or bitter, beers from a specific brewery–and using those to construct predictions for unseen beers.</p>
 <p>Luckily, there are several great packages in R that allow for easy implementation of matrix factorization. First, I need to do a bit of cleanup. Most reviewers don’t review many beers and most beers don’t get reviewed many times. We like a sparse matrix, but we don’t gain a lot of information from reviewers that review one time or beers than are only reviewed one time. We need to only include reviewers and beers above some threshold.</p>
-<pre class="r"><code>reviews_raw %&gt;%
-  count(review_profilename, sort = TRUE)%&gt;%
-  ggplot(aes(n))+
-  geom_histogram(fill = &quot;#0072B2&quot;, color = &#39;white&#39;, alpha = .8)+
-  scale_x_log10()+
-  labs(x = &quot;# of Reviews&quot;,
-       y = &quot;# of Reviewers&quot;,
-       title = &quot;How many reviews are reviewers posting?&quot;)+
-  my_theme_tweaks()</code></pre>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/number-of-reviews-histogram-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 <p>I’m filtering the dataset to only include reviewers who have reviewed at least 50 beers and only include beers with at least 100 reviews. With this dataset, I assign new indexes for user_id and beer_id (starting at 1) and then build a sparse triplet matrix–that’s just a fancy way of saying I build a matrix where I only include user and beer combinations that actually have a rating and I make sure it’s of the form (user_id, beer_id, rating).</p>
 <pre class="r"><code># filter to reviewers who have reviewed above 50 beers and beers with greater than 100 reviews
@@ -1803,20 +1643,7 @@ American Double / Imperial IPA
 </ol>
 <div id="theyre-correlated-you-say" class="section level4">
 <h4>They’re correlated you say?</h4>
-<pre class="r"><code>library(corrr)
-cor_results &lt;- reviews_raw %&gt;%
-  select(review_appearance, review_aroma, review_palate, review_taste, review_overall)%&gt;%
-  correlate()
-
-cor_results%&gt;%
-  shave()%&gt;%
-  rplot(shape = 15, colors = viridis::plasma(n = 6))</code></pre>
-<p><img src="/post/beer-advocate-reviews_files/figure-html/subfactors-correlation-analysis-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
-<pre class="r"><code>cor_results%&gt;%
-  # shave and fashion prune the results to a triangular table since values are mirrored
-  shave()%&gt;%
-  fashion()%&gt;%
-  formattable::formattable()</code></pre>
+<img src="/post/beer-advocate-reviews_files/figure-html/subfactors-correlation-analysis-1.png" width="90%" height="90%" style="display: block; margin: auto;" />
 <table class="table table-condensed">
 <thead>
 <tr>
