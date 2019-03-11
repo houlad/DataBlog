@@ -42,3 +42,4 @@ ignoreFiles = ["\\.Rmd$", "_files$", "_cache$"]
     disable_codefolding = false
     # Set to "hide" or "show" all codes by default
     codefolding_show = "hide"
+    
