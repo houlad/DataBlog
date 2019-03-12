@@ -646,14 +646,14 @@ top_bottom_conf_int_by_reviewid%&gt;%
        title = &quot;Top 15 &amp; Bottom 15 Styles: Beers not filtered&quot;,
        subtitle = &quot;Estimated Review Score of Beer Styles with 95% Confidence Intervals&quot;)+
   my_theme_tweaks()</code></pre>
-<p><img src="/post/beer-advocate-reviews_files/figure-html/non-filtered-styles-conf-ints-1.png" width="90%" height="90%" style="display: block; margin: auto;" /> The results are pretty similar to the other approach with some small differences. First, the confidence intervals are narrower for all styles. This is expected because of how I did the grouping. Instead of having, say, 100 beers to base the estimates off of, these styles may use thousands of reviews–remember all those one review beers we filtered out before? With all that additional data, the confidence intervals <em>should</em> get narrower. Second, we see a handful of new styles present in the top and bottom styles. Lambic - Unblended and Gose didn’t make the cut before, but are present now. These new additions to the to and bottom styles have the wider confidence intervals because they are basing the estimates of less data.</p>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/non-filtered-styles-conf-ints-1.png" width="90%" height="90%" style="display: block; margin: auto;" /> The results are pretty similar to the other approach with some small differences. First, the confidence intervals are narrower for all styles. This is expected because of how I did the grouping. Instead of having, say, 100 beers to base the estimates off of, these styles may use thousands of reviews–remember all those one review beers we filtered out before? With all that additional data, the confidence intervals <em>should</em> get narrower. Second, we see a handful of new styles present in the top and bottom styles. Lambic - Unblended and Gose didn’t make the cut before, but are present now. These new additions to the top and bottom styles have the wider confidence intervals because they are basing the estimates of less data.</p>
 <p>Essentially though, the information present is the same. Reviewers love stouts, belgian ales, sours and IPAs and they tend to dislike lagers and light beers.</p>
 </div>
 </div>
 </div>
 <div id="which-brewery-produces-the-strongest-beers-by-abv" class="section level2">
 <h2>Which brewery produces the strongest beers by ABV%?</h2>
-With a better handle on the dataset, now I can actually address the question! First things first, there are 67,785 reviews with no ABV data so we need to remove that data. It’s only 4.27% of all reviews, so for the time being I’m not going to worry about just removing those reviews. Now the question is–what <em>is</em> a strong beer anyway? You can see from the histogram of the distribution of ABV’s that the vast majority of beers are under 10% ABV. Only 18 beers out of over 66,000! are over 20% ABV. <img src="/post/beer-advocate-reviews_files/figure-html/beer-abv-exploration-1.png" width="90%" height="90%" style="display: block; margin: auto;" />
+With a better handle on the dataset, now I can actually address the question! First things first, there are 67,785 reviews with no ABV data so I need to remove that data. It’s only 4.27% of all reviews, so for the time being I’m not going to worry about just removing those reviews. Now the question is–what <em>is</em> a strong beer anyway? You can see from the histogram of the distribution of ABV’s that the vast majority of beers are under 10% ABV. <img src="/post/beer-advocate-reviews_files/figure-html/beer-abv-exploration-1.png" width="90%" height="90%" style="display: block; margin: auto;" />
 <table class="table table-condensed">
 <thead>
 <tr>
@@ -742,196 +742,14 @@ De Struise Brouwers
 American Double / Imperial Stout
 </td>
 </tr>
-<tr>
-<td style="text-align:right;">
-Tactical Nuclear Penguin
-</td>
-<td style="text-align:right;">
-32.00
-</td>
-<td style="text-align:right;">
-BrewDog
-</td>
-<td style="text-align:right;">
-American Double / Imperial Stout
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Schorschbräu Schorschbock 31%
-</td>
-<td style="text-align:right;">
-30.86
-</td>
-<td style="text-align:right;">
-Schorschbräu
-</td>
-<td style="text-align:right;">
-Eisbock
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Dave
-</td>
-<td style="text-align:right;">
-29.00
-</td>
-<td style="text-align:right;">
-Hair of the Dog Brewing Company / Brewery and Tasting Room
-</td>
-<td style="text-align:right;">
-English Barleywine
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Ghost Deer
-</td>
-<td style="text-align:right;">
-28.00
-</td>
-<td style="text-align:right;">
-BrewDog
-</td>
-<td style="text-align:right;">
-Belgian Strong Pale Ale
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Samuel Adams Utopias
-</td>
-<td style="text-align:right;">
-27.00
-</td>
-<td style="text-align:right;">
-Boston Beer Company (Samuel Adams)
-</td>
-<td style="text-align:right;">
-American Strong Ale
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Black Damnation V - Double Black
-</td>
-<td style="text-align:right;">
-26.00
-</td>
-<td style="text-align:right;">
-De Struise Brouwers
-</td>
-<td style="text-align:right;">
-American Double / Imperial Stout
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Samuel Adams Utopias MMIII
-</td>
-<td style="text-align:right;">
-25.00
-</td>
-<td style="text-align:right;">
-Boston Beer Company (Samuel Adams)
-</td>
-<td style="text-align:right;">
-American Strong Ale
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Samuel Adams Utopias (Aged On Cocoa Nibs)
-</td>
-<td style="text-align:right;">
-25.00
-</td>
-<td style="text-align:right;">
-Boston Beer Company (Samuel Adams)
-</td>
-<td style="text-align:right;">
-American Strong Ale
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Samuel Adams Utopias MMII
-</td>
-<td style="text-align:right;">
-24.00
-</td>
-<td style="text-align:right;">
-Boston Beer Company (Samuel Adams)
-</td>
-<td style="text-align:right;">
-American Strong Ale
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Black Damnation XI - Special Kay
-</td>
-<td style="text-align:right;">
-22.00
-</td>
-<td style="text-align:right;">
-De Struise Brouwers
-</td>
-<td style="text-align:right;">
-Russian Imperial Stout
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-44 Magnum
-</td>
-<td style="text-align:right;">
-22.00
-</td>
-<td style="text-align:right;">
-LagerHaus Grill &amp; Brewery
-</td>
-<td style="text-align:right;">
-American Strong Ale
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Colossus
-</td>
-<td style="text-align:right;">
-21.92
-</td>
-<td style="text-align:right;">
-DuClaw Brewing Company
-</td>
-<td style="text-align:right;">
-American Strong Ale
-</td>
-</tr>
-<tr>
-<td style="text-align:right;">
-Samuel Adams Millennium
-</td>
-<td style="text-align:right;">
-21.00
-</td>
-<td style="text-align:right;">
-Boston Beer Company (Samuel Adams)
-</td>
-<td style="text-align:right;">
-American Strong Ale
-</td>
-</tr>
 </tbody>
 </table>
+<p>Only 18 beers out of over 66,000! are over 20% ABV and as an early preview, you can see one brewery name standing out!.</p>
 <p>If I divide the data into reviews of beers &gt; 20% ABV and those &lt; 20% ABV, it’s easier to see how uncommon reviews for really high ABV beers are.</p>
-<p><img src="/post/beer-advocate-reviews_files/figure-html/greater-20-abv-distribution-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
-<p>The vast majority of beers reviewed fall right around the 5-6% range.</p>
-<p><img src="/post/beer-advocate-reviews_files/figure-html/less-20,%20abv%20distribution-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/abv-distributions-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+<p>The vast majority of beers reviewed fall right around the 5-6% range. And that’s not an empty plot on the right–there’s simply so few reviews of beers &gt;20% ABV that you can’t see them when I force the plots to have the same y-axis scale.</p>
 <p>The question of which brewery produces the strongest beers by ABV has more nuance than it might appear. First, the question asks which brewery produces the strongest <strong>beers</strong> which I am taking to mean it needs to produce more than one beer. Second, how should I measure how strong a breweries beers are? An average of their ABVs? Maybe take the median? What about looking at the proportion of beers that a brewery produces that are above some ‘strong’ beer threshold? All these methods seem to have merit and are pretty simple and quick to perform. Let’s try them out and see what they tell us.</p>
-<p>After a bit of filtering, grouping and aggregation(which you can see in the code fold below), you can see that Schorschbräu ranks at the top of both the mean and median rankings. In fact, the top 4 on both graphs are the same–albeit with one positional swap. One note: Why did I only include breweries that make 4 or more beers? Because the median number of beers produced is 4 and that seemed reasonable.</p>
+<p>After a bit of filtering, grouping and aggregation(which you can see in the code below), you can see that Schorschbräu ranks at the top of both the mean and median rankings. In fact, the top 4 on both graphs are the same–albeit with one positional swap. One note: Why did I only include breweries that make 4 or more beers? Because the median number of beers produced is 4 and that seemed reasonable.</p>
 <pre class="r"><code>average_abv &lt;- reviews_raw %&gt;%
   # remove reviews with missing abv
   filter(!is.na(beer_abv), !is.na(brewery_name))%&gt;%
@@ -965,7 +783,7 @@ average_abv &lt;- average_abv %&gt;%
            into = c(&quot;brewery_name&quot;, NA))
 
 # create strongest mean beer plot
-average_abv %&gt;%
+p3 &lt;- average_abv %&gt;%
   mutate(brewery_name = fct_reorder(brewery_name, avg_abv))%&gt;%
   # Median number of beers produced is 4 so only keeping those at or above that threshold
   filter(num_beers &gt;= 4)%&gt;%
@@ -975,12 +793,12 @@ average_abv %&gt;%
   scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;))+
   labs(x = &quot;ABV&quot;,
        y = &quot;&quot;, 
-       title = &quot;Breweries Producing the &#39;Strongest&#39; Beers: By Mean&quot;,
-       subtitle = &quot;Only Breweries producing 4 or more different beers&quot;)+
-  my_theme_tweaks()</code></pre>
-<p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beers-by-mean-median-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
-<pre class="r"><code># create strongest median beer plot
-average_abv %&gt;%
+       title = &quot;By Mean&quot;,
+       subtitle = &quot;&quot;)+
+  my_theme_tweaks()
+
+# create strongest median beer plot
+p4 &lt;- average_abv %&gt;%
   distinct(brewery_name, .keep_all = TRUE)%&gt;%
   mutate(brewery_name = fct_reorder(brewery_name, med_abv))%&gt;%
   filter(num_beers &gt;= 4)%&gt;%
@@ -990,10 +808,12 @@ average_abv %&gt;%
   scale_x_continuous(labels = scales::number_format(suffix = &quot;%&quot;))+
   labs(x = &quot;ABV&quot;,
        y = &quot;&quot;, 
-       title = &quot;Breweries Producing the &#39;Strongest&#39; Beers: By Median&quot;,
-       subtitle = &quot;Only Breweries producing 4 or more different beers&quot;)+
-  my_theme_tweaks()</code></pre>
-<p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beers-by-mean-median-2.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
+       title = &quot;By Median&quot;,
+       subtitle = &quot;&quot;)+
+  my_theme_tweaks()
+
+ggarrange(p3, p4)</code></pre>
+<p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beers-by-mean-median-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 <p>Now what if the brewery that produces the strongest beers is the one that has the highest proportion of its beers above some ABV threshold. We know the mean ABV for a beer is 6.27% (median 5.7%). In fact, the 75th percentile for beer ABV is only 7.2%. 10% is where I, personally, start to think a beer is strong and with only 6.51% of beers having greater than or equal to 10% ABV, I think it’s a pretty reasonable mark of a ‘strong’ beer.</p>
 <p><img src="/post/beer-advocate-reviews_files/figure-html/strongest-beer-by-proportion-above-10-1.png" width="90%" height="90%" style="display: block; margin: auto;" /></p>
 <p>Yet again, Schorschbräu sits at the top. They only make 10 different beers, but 90% of them are 10% ABV or higher! For a brewery that produces quite a few more beers, but still cranks out high ABV stuff, AleSmith Brewing Company is up there. They make over 50 different beers and over 70% of them are above 10% ABV.</p>
@@ -1162,8 +982,9 @@ pred$rating &lt;- r$predict(prediction_set, out_memory())
 saveRDS(pred, &quot;beer_reco_predictions.RDS&quot;)</code></pre>
 <p>The model runs through 20 iterations and the RMSE is still dropping. You can really easily overfit this model. If you do 300 or even 400 latent factors the RMSE will continue to drop. In a full scale implementation, I would be using a training and testing set and/or cross validation to choose the number of latent factors that minimizes the RMSE on the test set. Here, I’m simply doing a proof of concept, so we are playing it a bit fast and loose.</p>
 <p>With the model trained and predictions precomputed for all users, I can select some users and examine the results. I built a couple helper functions to view the results. The first takes the prediction data frame and filters out the beers that user already reviewed then returns the top 3 beers predicted for them. The second function grabs the top 10 beers that that user already reviewed so we can compare and see if the results are sensible.</p>
-<pre class="r"><code>#Look into using &#39;here&#39; package for easier paths here
-predictions &lt;- readRDS(&quot;~/Playground/Playground/beer_reco_predictions.RDS&quot;)
+<pre class="r"><code>#using &#39;here&#39; for easier paths
+predictions &lt;- here::here(&quot;content&quot;, &quot;post&quot;, &quot;beer_reco_predictions.RDS&quot;)%&gt;%
+  readRDS()
 
 top_three_beers_for_user &lt;- function(preds = predictions, user_beer_sparse = user_beer_triplet, user_id = NULL){
 # inputs: 
@@ -1724,7 +1545,7 @@ American Double / Imperial IPA
 </div>
 <div id="which-of-the-factorsaroma-taste-appearance-palette-are-most-important-in-determining-the-overall-quality-of-the-beer" class="section level2">
 <h2>Which of the factors(aroma, taste, appearance, palette) are most important in determining the overall quality of the beer?</h2>
-<p>This is another fun question because–yet again–there are a lot of different ways you could reason about finding an answer. Initially, I wanted to use PCA. I figured I could use it to see which factor most closely corresponded to the first principle component–which is where, by definition, most of the variance occurs. But after thinking it over some more, I decided not to use this approach. Typically PCA is used when you have a lot of variables that are in play. Here, I’m only really looking at 4. While I think you could cast the problem in a way to ‘use’ PCA, I don’t know that it’s the good approach, so I’m using other techniques here. I’d love to see how someone would approach this problem using PCA though, so if you get a hankering to do that, please shoot me a link to your analysis in the comments!</p>
+<p>This is another fun question because–yet again–there are a lot of different ways you could reason about finding an answer. Initially, I wanted to use PCA. I figured I could use it to see which factor most closely corresponded to the first principle component–which is where, by definition, most of the variance occurs. But after thinking it over some more, I decided not to use this approach. Typically PCA is used when you have a lot of variables that are in play. Here, I’m only really looking at 4. While I think you <em>could</em> cast the problem in a way to use PCA, I don’t know that it’s the good approach, so I’m using other techniques here. I’d love to see how someone would approach this problem using PCA though, so if you get a hankering to do that, please shoot me a link to your analysis in the comments!</p>
 <p>Instead of PCA, I’m going to do two things:</p>
 <ol style="list-style-type: decimal">
 <li>Examine the correlations between the subfactors(taste, palette, aroma, appearance) and the overall review scores</li>
@@ -1902,7 +1723,7 @@ summary(m1)</code></pre>
 ## Residual standard error: 0.4213 on 1586602 degrees of freedom
 ## Multiple R-squared:  0.6581, Adjusted R-squared:  0.6581 
 ## F-statistic: 7.636e+05 on 4 and 1586602 DF,  p-value: &lt; 2.2e-16</code></pre>
-<p>This linear model is predicting review_overall from the sub-reviews–taste, aroma, appearance and palate. With an R-squared of just .658, this model isn’t super accurate, but it’s good enough for our purposes.<a href="#fn3" class="footnoteRef" id="fnref3"><sup>3</sup></a> I just want to see which factor is most important to the overall review score after all. It’s tempting to just look at the coefficient values and say whichever is larger is more important, but that’s <a href="https://stats.stackexchange.com/a/202846">not really true</a>. Variables on different scales, variables with wildly different variances or multi-collinearity between variables will all make determining feature importance from the coefficient values problematic(if not outright wrong).</p>
+<p>This linear model is predicting review_overall from the sub-reviews–taste, aroma, appearance and palate. With an R-squared of just .658, this model isn’t super accurate, but it’s good enough for our purposes.<a href="#fn3" class="footnoteRef" id="fnref3"><sup>3</sup></a> I just want to see which factor is most important to the overall review score after all. It’s tempting to look at the coefficient values and say whichever is larger is more important, but that’s <a href="https://stats.stackexchange.com/a/202846">not really true</a>. Variables on different scales, variables with wildly different variances or multi-collinearity between variables will all make determining feature importance from the coefficient values problematic(if not outright wrong).</p>
 <p>Luckily, some very smart statisticians built a package called <a href="https://cran.r-project.org/web/packages/relaimpo/relaimpo.pdf"><strong>relaimpo</strong></a> that will calculate more useful feature importance metrics. It turns out this is a really slippery and complicated area of statistics, so I’d encourage you to read about it <a href="https://prof.beuth-hochschule.de/fileadmin/prof/groemp/downloads/amstat07mayp139.pdf">here</a> if you’d like to see how a statistician thinks about this area. There are 8 different metrics you can use in <em>relaimpo</em>, but they all basically give the same answer. I’ve included 5 below(<em>lmg</em> and <em>betasq</em> seem to be the most commonly used metrics) and you can see that each metric under ‘Relative importance metrics’ gives the same breakdown of feature importance:</p>
 <ol style="list-style-type: decimal">
 <li>Taste</li>
@@ -2011,7 +1832,7 @@ aroma_and_appearance %&gt;%
 <div id="wrapup" class="section level3">
 <h3>Wrapup</h3>
 <p>This was a really fun dataset to play around with, and I have to say I completely agree with Tanya Cashorali when she says this sort of take home test is a great way to interview data science job candidates. There’s a lot of flexibility in how you perform the analysis and I think you get a good idea of what someone is capable of and how they reason about solving actual problems.</p>
-<p>As usual, the full code for this report can be found <a href="https://github.com/Grollus/DataBlog/tree/master/content/post">here</a> and thanks for reading!</p>
+<p>As usual, the full code for this post can be found <a href="https://github.com/Grollus/DataBlog/blob/master/content/post/beer-advocate-reviews.Rmd">here</a> and thanks for reading!</p>
 </div>
 <div id="code-appendix" class="section level3">
 <h3>Code Appendix</h3>

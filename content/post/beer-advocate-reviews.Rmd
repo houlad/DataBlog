@@ -401,13 +401,13 @@ top_bottom_conf_int_by_reviewid%>%
        subtitle = "Estimated Review Score of Beer Styles with 95% Confidence Intervals")+
   my_theme_tweaks()
 ```
-The results are pretty similar to the other approach with some small differences. First, the confidence intervals are narrower for all styles. This is expected because of how I did the grouping. Instead of having, say, 100 beers to base the estimates off of, these styles may use thousands of reviews--remember all those one review beers we filtered out before? With all that additional data, the confidence intervals *should* get narrower. Second, we see a handful of new styles present in the top and bottom styles. Lambic - Unblended and Gose didn't make the cut before, but are present now. These new additions to the to and bottom styles have the wider confidence intervals because they are basing the estimates of less data.
+The results are pretty similar to the other approach with some small differences. First, the confidence intervals are narrower for all styles. This is expected because of how I did the grouping. Instead of having, say, 100 beers to base the estimates off of, these styles may use thousands of reviews--remember all those one review beers we filtered out before? With all that additional data, the confidence intervals *should* get narrower. Second, we see a handful of new styles present in the top and bottom styles. Lambic - Unblended and Gose didn't make the cut before, but are present now. These new additions to the top and bottom styles have the wider confidence intervals because they are basing the estimates of less data.
 
 Essentially though, the information present is the same. Reviewers love stouts, belgian ales, sours and IPAs and they tend to dislike lagers and light beers.
 
 
 ## Which brewery produces the strongest beers by ABV%?
-With a better handle on the dataset, now I can actually address the question! First things first, there are `r scales::comma(sum(is.na(reviews_raw$beer_abv)))` reviews with no ABV data so we need to remove that data. It's only `r scales::percent(sum(is.na(reviews_raw$beer_abv))/nrow(reviews_raw))` of all reviews, so for the time being I'm not going to worry about just removing those reviews. Now the question is--what *is* a strong beer anyway? You can see from the histogram of the distribution of ABV's that the vast majority of beers are under 10% ABV. Only 18 beers out of over 66,000! are over 20% ABV.
+With a better handle on the dataset, now I can actually address the question! First things first, there are `r scales::comma(sum(is.na(reviews_raw$beer_abv)))` reviews with no ABV data so I need to remove that data. It's only `r scales::percent(sum(is.na(reviews_raw$beer_abv))/nrow(reviews_raw))` of all reviews, so for the time being I'm not going to worry about just removing those reviews. Now the question is--what *is* a strong beer anyway? You can see from the histogram of the distribution of ABV's that the vast majority of beers are under 10% ABV. 
 ```{r, beer-abv-exploration, echo = FALSE}
 # Looking at beer abv; removing reviews with missing abv(about 67k)
 reviews_raw %>%
@@ -429,29 +429,28 @@ reviews_raw%>%
   count(beer_name, beer_abv, brewery_name, beer_style, sort = TRUE)%>%
   select(-n)%>%
   arrange(desc(beer_abv))%>%
+  head(5)%>%
   formattable::formattable()
 ```
+Only 18 beers out of over 66,000! are over 20% ABV and as an early preview, you can see one brewery name standing out!.
 
 If I divide the data into reviews of beers > 20% ABV and those < 20% ABV, it's easier to see how uncommon reviews for really high ABV beers are. 
 
-```{r, greater-20-abv-distribution, echo = FALSE}
-reviews_raw%>%
+```{r, abv-distributions, echo = FALSE}
+library(ggpubr)
+p1 <- reviews_raw%>%
   filter(!is.na(beer_abv), beer_abv > 20)%>%
   ggplot(aes(beer_abv))+
   geom_histogram(fill = "#0072B2", color = 'white', alpha = .8)+
-  scale_y_continuous(labels = scales::comma_format(), expand = c(0,0))+
+  scale_y_continuous(limits = c(0, 250000), labels = scales::comma_format(), expand = c(0,0))+
   scale_x_continuous(labels = scales::number_format(suffix = "%"))+
   labs(x = "ABV",
        y = "",
-       title = "Distribution of Beer ABV: Only beers >20% ABV")+
+       title = ">20% ABV")+
   my_theme_tweaks()
-```
 
-The vast majority of beers reviewed fall right around the 5-6% range.
-
-```{r, less-20, abv distribution, echo = FALSE}
 # Most beers hoover around the 5% range which isn't surprising as a beer drinker
-reviews_raw %>%
+p2 <- reviews_raw %>%
   filter(!is.na(beer_abv), beer_abv < 20)%>%
   ggplot(aes(beer_abv))+
   geom_histogram(fill = "#0072B2", color = 'white', alpha = .8)+
@@ -459,14 +458,18 @@ reviews_raw %>%
   scale_x_continuous(labels = scales::number_format(suffix = "%"),
                      expand = c(0,0))+
   labs(x = "ABV",
-       y = "",
-       title = "Distribution of Beer ABV: Only beers <20% ABV")+
+       y = "# of Reviews",
+       title = "<20% ABV")+
   my_theme_tweaks()
+
+ggarrange(p2, p1)
 ```
+
+The vast majority of beers reviewed fall right around the 5-6% range. And that's not an empty plot on the right--there's simply so few reviews of beers >20% ABV that you can't see them when I force the plots to have the same y-axis scale.
 
 The question of which brewery produces the strongest beers by ABV has more nuance than it might appear. First, the question asks which brewery produces the strongest **beers** which I am taking to mean it needs to produce more than one beer. Second, how should I measure how strong a breweries beers are? An average of their ABVs? Maybe take the median? What about looking at the proportion of beers that a brewery produces that are above some 'strong' beer threshold? All these methods seem to have merit and are pretty simple and quick to perform. Let's try them out and see what they tell us.
 
-After a bit of filtering, grouping and aggregation(which you can see in the code fold below), you can see that Schorschbräu ranks at the top of both the mean and median rankings. In fact, the top 4 on both graphs are the same--albeit with one positional swap. One note: Why did I only include breweries that make 4 or more beers? Because the median number of beers produced is 4 and that seemed reasonable.
+After a bit of filtering, grouping and aggregation(which you can see in the code below), you can see that Schorschbräu ranks at the top of both the mean and median rankings. In fact, the top 4 on both graphs are the same--albeit with one positional swap. One note: Why did I only include breweries that make 4 or more beers? Because the median number of beers produced is 4 and that seemed reasonable.
 
 
 ```{r, strongest-beers-by-mean-median}
@@ -503,7 +506,7 @@ average_abv <- average_abv %>%
            into = c("brewery_name", NA))
 
 # create strongest mean beer plot
-average_abv %>%
+p3 <- average_abv %>%
   mutate(brewery_name = fct_reorder(brewery_name, avg_abv))%>%
   # Median number of beers produced is 4 so only keeping those at or above that threshold
   filter(num_beers >= 4)%>%
@@ -513,12 +516,12 @@ average_abv %>%
   scale_x_continuous(labels = scales::number_format(suffix = "%"))+
   labs(x = "ABV",
        y = "", 
-       title = "Breweries Producing the 'Strongest' Beers: By Mean",
-       subtitle = "Only Breweries producing 4 or more different beers")+
+       title = "By Mean",
+       subtitle = "")+
   my_theme_tweaks()
 
 # create strongest median beer plot
-average_abv %>%
+p4 <- average_abv %>%
   distinct(brewery_name, .keep_all = TRUE)%>%
   mutate(brewery_name = fct_reorder(brewery_name, med_abv))%>%
   filter(num_beers >= 4)%>%
@@ -528,10 +531,14 @@ average_abv %>%
   scale_x_continuous(labels = scales::number_format(suffix = "%"))+
   labs(x = "ABV",
        y = "", 
-       title = "Breweries Producing the 'Strongest' Beers: By Median",
-       subtitle = "Only Breweries producing 4 or more different beers")+
+       title = "By Median",
+       subtitle = "")+
   my_theme_tweaks()
+
+ggarrange(p3, p4)
 ```
+
+
 
 
 ```{r, median-mean-beer-calculation, echo = FALSE}
@@ -688,8 +695,9 @@ The model runs through 20 iterations and the RMSE is still dropping. You can rea
 
 With the model trained and predictions precomputed for all users, I can select some users and examine the results. I built a couple helper functions to view the results. The first takes the prediction data frame and filters out the beers that user already reviewed then returns the top 3 beers predicted for them. The second function grabs the top 10 beers that that user already reviewed so we can compare and see if the results are sensible.
 ```{r, recommendation-and-helper-functions}
-#Look into using 'here' package for easier paths here
-predictions <- readRDS("~/Playground/Playground/beer_reco_predictions.RDS")
+#using 'here' for easier paths
+predictions <- here::here("content", "post", "beer_reco_predictions.RDS")%>%
+  readRDS()
 
 top_three_beers_for_user <- function(preds = predictions, user_beer_sparse = user_beer_triplet, user_id = NULL){
 # inputs: 
@@ -748,10 +756,9 @@ top_three_beers_for_user(user_id = 270)
 users_top_rated_beers(user = 270)
 ```
 
-
 ## Which of the factors(aroma, taste, appearance, palette) are most important in determining the overall quality of the beer?
 
-This is another fun question because--yet again--there are a lot of different ways you could reason about finding an answer. Initially, I wanted to use PCA. I figured I could use it to see which factor most closely corresponded to the first principle component--which is where, by definition, most of the variance occurs. But after thinking it over some more, I decided not to use this approach. Typically PCA is used when you have a lot of variables that are in play. Here, I'm only really looking at 4. While I think you could cast the problem in a way to 'use' PCA, I don't know that it's the good approach, so I'm using other techniques here. I'd love to see how someone would approach this problem using PCA though, so if you get a hankering to do that, please shoot me a link to your analysis in the comments!
+This is another fun question because--yet again--there are a lot of different ways you could reason about finding an answer. Initially, I wanted to use PCA. I figured I could use it to see which factor most closely corresponded to the first principle component--which is where, by definition, most of the variance occurs. But after thinking it over some more, I decided not to use this approach. Typically PCA is used when you have a lot of variables that are in play. Here, I'm only really looking at 4. While I think you *could* cast the problem in a way to use PCA, I don't know that it's the good approach, so I'm using other techniques here. I'd love to see how someone would approach this problem using PCA though, so if you get a hankering to do that, please shoot me a link to your analysis in the comments!
 
 Instead of PCA, I'm going to do two things: 
 
@@ -822,7 +829,7 @@ m1 <- lm(review_overall~ review_taste + review_aroma + review_appearance + revie
 summary(m1)
 ```
 
-This linear model is predicting review_overall from the sub-reviews--taste, aroma, appearance and palate. With an R-squared of just .658, this model isn't super accurate, but it's good enough for our purposes.[^3] I just want to see which factor is most important to the overall review score after all. It's tempting to just look at the coefficient values and say whichever is larger is more important, but that's [not really true](https://stats.stackexchange.com/a/202846). Variables on different scales, variables with wildly different variances or multi-collinearity between variables will all make determining feature importance from the coefficient values problematic(if not outright wrong).
+This linear model is predicting review_overall from the sub-reviews--taste, aroma, appearance and palate. With an R-squared of just .658, this model isn't super accurate, but it's good enough for our purposes.[^3] I just want to see which factor is most important to the overall review score after all. It's tempting to look at the coefficient values and say whichever is larger is more important, but that's [not really true](https://stats.stackexchange.com/a/202846). Variables on different scales, variables with wildly different variances or multi-collinearity between variables will all make determining feature importance from the coefficient values problematic(if not outright wrong).
 
 [^3]: I did explore including interaction effects in the model, but they didn't provide much improvement and they make determining feature importance a little more difficult. Ultimately I decided to ignore them.
 
@@ -913,7 +920,7 @@ This graphic could also be useful if you care slightly more about, say, the arom
 
 This was a really fun dataset to play around with, and I have to say I completely agree with Tanya Cashorali when she says this sort of take home test is a great way to interview data science job candidates. There's a lot of flexibility in how you perform the analysis and I think you get a good idea of what someone is capable of and how they reason about solving actual problems.
 
-As usual, the full code for this report can be found [here](https://github.com/Grollus/DataBlog/tree/master/content/post) and thanks for reading!
+As usual, the full code for this post can be found [here](https://github.com/Grollus/DataBlog/blob/master/content/post/beer-advocate-reviews.Rmd) and thanks for reading!
 
 ### Code Appendix
 This section includes additional code that was used--mainly to explore the data--but that didn't make it past the cutting stage of report writing. It's included because it's interesting, if not directly relevant to the analysis. 
