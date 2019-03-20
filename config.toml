@@ -1,4 +1,4 @@
-baseurl = "/"
+baseurl = "https://www.ahoulette.com"
 relativeurls = true
 languageCode = "en-us"
 title = "A blog analyzing stuff, using data"
