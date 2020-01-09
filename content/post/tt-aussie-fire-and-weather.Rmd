@@ -1,6 +1,8 @@
 ---
-title: "tidy-tuesday-australian-rainfall"
+title: "Tidy Tuesday: How much does it rain in Australia--with gifs!"
 output: html_document
+author: Adam
+date: '2020-01-09'
 ---
 
 ```{r setup, include=FALSE}
