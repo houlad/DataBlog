@@ -68,14 +68,14 @@ p <- yearly_rainfall%>%
 p
 ```
 
-```{r gif-creation, cache = TRUE}
+```{r gif-creation, cache = TRUE, echo = FALSE, eval = TRUE}
 rainfall_animation <- p +
   geom_point()+
   transition_reveal(year)+
   labs(title = "How much does it rain every year in Australia?",
        subtitle = "Year: {round(frame_along)}")
 
-rainfall_animation
+animate(rainfall_animation)
 
 #anim_save("yearly_rainfall.gif", rainfall_animation)
 ```

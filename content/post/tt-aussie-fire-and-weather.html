@@ -1,0 +1,65 @@
+---
+title: "Tidy Tuesday: How much does it rain in Australia--with gifs!"
+output: html_document
+author: Adam
+date: '2020-01-09'
+---
+
+
+
+<p>A goal of mine in the new year is to take part in <a href="https://github.com/rfordatascience/tidytuesday">tidytuesday</a> as often as I
+can. It’s a great, supportive community and I think it’s important to deliberately practice your data skills to keep them sharp.
+So I’m going to try to produce some sort of tidy tuesday content quite often and then tweet it out or, on more involved weeks, do a
+blog post about the process.</p>
+<p>This weeks data set is Australian weather and fire data. If you’ve kept up with the news you know how devastated they have been by
+enormous wildfires this year. There’s already been a ton of fire visualizations making the rounds and, frankly, with my mapping skills I
+don’t think I can add anything useful to the pool. Instead, I want to try out <a href="https://github.com/thomasp85/gganimate">gganimate</a> for the first time and see how to make a simple, animated graph.</p>
+<div id="data-and-package-load" class="section level2">
+<h2>Data and Package Load</h2>
+<pre class="r"><code>library(tidyverse)
+library(gganimate)
+
+theme_set(theme_minimal())
+
+rainfall &lt;- readr::read_csv(&#39;https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-07/rainfall.csv&#39;)%&gt;%
+  mutate(date = as.Date(paste0(year,&quot;-&quot;, month, &quot;-&quot;, day)))
+temperature &lt;- readr::read_csv(&#39;https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-07/temperature.csv&#39;)</code></pre>
+</div>
+<div id="whats-the-yearly-rainfall-in-australia" class="section level2">
+<h2>What’s the yearly rainfall in Australia?</h2>
+<p>I’ve seen these sort of growing line graphs before, but I wasn’t sure how to make them. Turns out it’s not bad with gganimate.
+First, I group and summarize the data to get the yearly rainfall for each of the 6 cities in the data set. Then I build a graph
+of my design. The gganimate bit comes next. Since I have a time dimension–year–I need to use <em>transition_reveal</em> to gradually
+allow the data to, <em>cough</em>, reveal itself! I count along the years as they are being revealed by referencing the <em>frame_along</em>
+variable that <em>transition_along</em> makes available.</p>
+<pre class="r"><code>yearly_rainfall &lt;- rainfall%&gt;%
+  filter(!is.na(rainfall))%&gt;%
+  select(city_name, year, rainfall)%&gt;%
+  group_by(year, city_name)%&gt;%
+  summarise(yearly_rainfall = sum(rainfall))
+
+cbp1 &lt;- c(&quot;#999999&quot;, &quot;#E69F00&quot;, &quot;#56B4E9&quot;, &quot;#009E73&quot;,
+          &quot;#F0E442&quot;, &quot;#0072B2&quot;, &quot;#D55E00&quot;, &quot;#CC79A7&quot;)
+
+p &lt;- yearly_rainfall%&gt;%
+  filter(year &gt;= 1919)%&gt;%
+  ggplot(aes(x = year, y = yearly_rainfall, color = city_name))+
+  geom_line(size = .75)+
+  scale_color_manual(values = cbp1)+
+  expand_limits(x = c(1919, 2021))+
+  theme(legend.position = &#39;top&#39;,
+        legend.key.size = unit(10, &#39;mm&#39;))+
+  guides(color = guide_legend(override.aes = list(size = 2),
+                              nrow = 1))+
+  labs(color = &quot;&quot;,
+       x = &quot;&quot;, 
+       y = &quot;Yearly Rainfall(mm)&quot;)
+
+p</code></pre>
+<p><img src="/post/tt-aussie-fire-and-weather_files/figure-html/base-graph-1.png" width="672" /></p>
+<p><img src="/post/tt-aussie-fire-and-weather_files/figure-html/gif-creation-1.gif" /><!-- --></p>
+<p>Pretty cool, huh?! With this graph/gif, it’s pretty easy to see which cities get more rainfall. It’s also curious that 4 of the 6 cities didn’t have
+data until ~ 1970. I have no idea why, but if this were a different project I’d look into why that might be.</p>
+<p>My only other thought is about Brisbane. All the other cities are relatively stable, but Brisbane has a marked jump up around 2000. Maybe a reporting change?
+If you have any guesses or ideas why, feel free to send me a message!</p>
+</div>
