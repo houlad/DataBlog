@@ -12,4 +12,4 @@
 command = "hugo -b $DEPLOY_PRIME_URL --buildFuture"
 
 [context.branch-deploy]
-command = "hugo -b $DEPLOY_PRIME_URL --buildFuture"blog
+command = "hugo -b $DEPLOY_PRIME_URL --buildFuture"
